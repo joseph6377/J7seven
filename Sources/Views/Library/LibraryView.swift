@@ -2,70 +2,116 @@ import SwiftUI
 
 struct LibraryView: View {
     @Environment(AppState.self) private var appState
+    @Namespace private var ns
 
     var body: some View {
         Group {
             if appState.books.isEmpty {
                 emptyState
             } else {
-                bookList
+                bookGrid
             }
         }
         .onAppear { appState.refresh() }
-        // Refresh library when a TTS book finishes generating
         .onChange(of: appState.ttsGenerationService.state) { _, newState in
             if case .done = newState { appState.refresh() }
         }
     }
 
-    // MARK: - Book list
+    // MARK: - Grid
 
-    private var bookList: some View {
-        List(appState.books) { book in
-            NavigationLink {
-                BookPlayerLink(entry: book)
-            } label: {
-                BookRow(book: book)
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                Button(role: .destructive) {
-                    appState.libraryService.deleteBook(slug: book.slug)
-                    appState.refresh()
-                } label: {
-                    Label("Delete", systemImage: "trash")
+    private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
+
+    private var bookGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 20) {
+                ForEach(appState.books) { book in
+                    NavigationLink {
+                        BookDetailView(entry: book)
+                    } label: {
+                        BookGridCell(book: book)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            appState.libraryService.deleteBook(slug: book.slug)
+                            appState.refresh()
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 120)
         }
-        .listStyle(.plain)
     }
 
     // MARK: - Empty state
 
     private var emptyState: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "book.closed")
-                .font(.system(size: 64))
-                .foregroundStyle(.tertiary)
-            Text("No Books Yet")
+        VStack(spacing: 0) {
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.08))
+                    .frame(width: 140, height: 140)
+                Circle()
+                    .fill(Color.accentColor.opacity(0.05))
+                    .frame(width: 190, height: 190)
+                Image(systemName: "headphones")
+                    .font(.system(size: 56, weight: .light))
+                    .foregroundStyle(Color.accentColor.opacity(0.7))
+            }
+            .padding(.bottom, 28)
+
+            Text("Your Library is Empty")
                 .font(.title2.bold())
-            Text("Tap **+** to import an EPUB and generate an audiobook.")
+                .padding(.bottom, 8)
+
+            Text("Import an EPUB to generate your first\non-device audiobook.")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .lineSpacing(3)
+
+            Spacer()
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Book grid cell
+
+private struct BookGridCell: View {
+    let book: LibraryEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Cover
+            CoverImageView(slug: book.slug, filename: book.cover)
+                .aspectRatio(2/3, contentMode: .fill)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+
+            // Title + author
+            VStack(alignment: .leading, spacing: 2) {
+                Text(book.title)
+                    .font(.footnote.bold())
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                Text(book.author)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
     }
 }
 
 // MARK: - Book detail (chapter list → player)
-
-private struct BookPlayerLink: View {
-    @Environment(AppState.self) private var appState
-    let entry: LibraryEntry
-
-    var body: some View {
-        BookDetailView(entry: entry)
-    }
-}
 
 struct BookDetailView: View {
     @Environment(AppState.self) private var appState
@@ -87,7 +133,7 @@ struct BookDetailView: View {
             }
         }
         .navigationTitle(entry.title)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $showPlayer) {
             PlayerView()
                 .environment(appState)
@@ -97,13 +143,11 @@ struct BookDetailView: View {
     private func chapterList(manifest: BookManifest) -> some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                // Cover + metadata header
                 header(manifest: manifest)
                     .padding(.bottom, 8)
 
                 Divider()
 
-                // Chapter rows
                 ForEach(Array(manifest.chapters.enumerated()), id: \.element.id) { idx, ch in
                     ChapterRow(
                         index: idx,
@@ -122,9 +166,10 @@ struct BookDetailView: View {
                         Divider().padding(.leading, 72)
                     }
                 }
+
+                Spacer(minLength: 100)
             }
         }
-        // Mini-player at bottom if something is already loaded
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if player.book != nil {
                 Button { showPlayer = true } label: { MiniPlayerBar() }
@@ -135,12 +180,12 @@ struct BookDetailView: View {
     }
 
     private func header(manifest: BookManifest) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             CoverImageView(slug: manifest.slug, filename: manifest.cover)
-                .frame(width: 140, height: 200)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 8)
-                .padding(.top, 20)
+                .frame(width: 148, height: 220)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(color: .black.opacity(0.22), radius: 20, x: 0, y: 10)
+                .padding(.top, 24)
 
             VStack(spacing: 4) {
                 Text(manifest.title)
@@ -152,15 +197,15 @@ struct BookDetailView: View {
                 Text("\(manifest.chapters.count) chapters · \(manifest.duration.formattedDurationLong)")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .padding(.top, 2)
             }
             .padding(.horizontal, 24)
 
-            // Resume / Play from start
-            HStack(spacing: 12) {
-                let progress = appState.libraryService.loadProgress(slug: manifest.slug)
-                let hasProgress = progress.chapterIdx > 0 || progress.time > 5
+            let progress = appState.libraryService.loadProgress(slug: manifest.slug)
+            let hasProgress = progress.chapterIdx > 0 || progress.time > 5
 
-                if hasProgress {
+            if hasProgress {
+                HStack(spacing: 10) {
                     Button {
                         appState.playerService.play(book: manifest, chapterIdx: progress.chapterIdx, time: progress.time)
                         showPlayer = true
@@ -168,7 +213,7 @@ struct BookDetailView: View {
                         Label("Resume", systemImage: "play.fill")
                             .font(.subheadline.bold())
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, 13)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.accentColor)
@@ -177,27 +222,28 @@ struct BookDetailView: View {
                         appState.playerService.play(book: manifest, chapterIdx: 0, time: 0)
                         showPlayer = true
                     } label: {
-                        Label("Restart", systemImage: "arrow.counterclockwise")
+                        Image(systemName: "arrow.counterclockwise")
                             .font(.subheadline.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, 13)
+                            .padding(.horizontal, 16)
                     }
                     .buttonStyle(.bordered)
-                } else {
-                    Button {
-                        appState.playerService.play(book: manifest, chapterIdx: 0, time: 0)
-                        showPlayer = true
-                    } label: {
-                        Label("Play", systemImage: "play.fill")
-                            .font(.subheadline.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.accentColor)
                 }
+                .padding(.horizontal, 24)
+            } else {
+                Button {
+                    appState.playerService.play(book: manifest, chapterIdx: 0, time: 0)
+                    showPlayer = true
+                } label: {
+                    Label("Play", systemImage: "play.fill")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.accentColor)
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
         }
     }
 }
@@ -214,7 +260,6 @@ private struct ChapterRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 16) {
-                // Number / playing indicator
                 ZStack {
                     Circle()
                         .fill(isCurrent ? Color.accentColor : Color(.secondarySystemBackground))
@@ -238,7 +283,7 @@ private struct ChapterRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(chapter.title)
                         .font(.body)
-                        .foregroundStyle(isCurrent ? Color.accentColor : Color.primary)
+                        .foregroundStyle(isCurrent ? Color.accentColor : .primary)
                         .lineLimit(2)
                     Text(chapter.duration.formattedDurationLong)
                         .font(.caption)
@@ -259,7 +304,7 @@ private struct ChapterRow: View {
     }
 }
 
-// MARK: - Mini player bar (shown at bottom of chapter list)
+// MARK: - Mini player bar
 
 private struct MiniPlayerBar: View {
     @Environment(AppState.self) private var appState
@@ -302,7 +347,6 @@ private struct MiniPlayerBar: View {
             .padding(.vertical, 10)
             .background(.regularMaterial)
             .overlay(alignment: .top) {
-                // Thin progress line
                 GeometryReader { geo in
                     let pct = player.duration > 0 ? player.currentTime / player.duration : 0
                     Rectangle()
@@ -313,34 +357,5 @@ private struct MiniPlayerBar: View {
                 .frame(height: 2)
             }
         )
-    }
-}
-
-// MARK: - Book row
-
-private struct BookRow: View {
-    let book: LibraryEntry
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Cover
-            CoverImageView(slug: book.slug, filename: book.cover)
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(book.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(book.author)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(book.duration.formattedDurationLong)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(.vertical, 4)
     }
 }

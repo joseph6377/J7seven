@@ -9,22 +9,33 @@ struct CoverImageView: View {
         return UIImage(contentsOfFile: BookPaths.localURL(slug: slug, filename: filename).path)
     }
 
+    // Deterministic gradient per book based on slug
+    private var placeholderGradient: LinearGradient {
+        let hash = abs(slug.hashValue)
+        let palettes: [(Color, Color)] = [
+            (.purple, .indigo),
+            (.teal, .blue),
+            (.orange, .pink),
+            (.green, .teal),
+            (.indigo, .purple),
+            (.pink, .orange),
+        ]
+        let (a, b) = palettes[hash % palettes.count]
+        return LinearGradient(colors: [a, b], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
     var body: some View {
         if let img = image {
             Image(uiImage: img)
                 .resizable()
                 .scaledToFill()
         } else {
-            LinearGradient(
-                colors: [Color(.systemGray4), Color(.systemGray5)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .overlay(
-                Image(systemName: "book.closed.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(.white.opacity(0.4))
-            )
+            placeholderGradient
+                .overlay(
+                    Image(systemName: "headphones")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(.white.opacity(0.5))
+                )
         }
     }
 }
