@@ -16,7 +16,10 @@ struct LibraryView: View {
         .onChange(of: appState.ttsGenerationService.state) { _, newState in
             if case .done = newState { appState.refresh() }
         }
-        // Refresh library each time a chapter is encoded so the book appears progressively
+        // Refresh when generation starts (stub manifest written) or a chapter finishes
+        .onChange(of: appState.ttsGenerationService.isActive) { _, _ in
+            appState.refresh()
+        }
         .onChange(of: appState.ttsGenerationService.completedChapterCount) { _, _ in
             appState.refresh()
         }
@@ -90,17 +93,33 @@ struct LibraryView: View {
 // MARK: - Book grid cell
 
 private struct BookGridCell: View {
+    @Environment(AppState.self) private var appState
     let book: LibraryEntry
+
+    private var isGenerating: Bool {
+        appState.ttsGenerationService.liveBook?.slug == book.slug
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Cover
-            CoverImageView(slug: book.slug, filename: book.cover)
-                .aspectRatio(2/3, contentMode: .fill)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+            ZStack(alignment: .bottomLeading) {
+                CoverImageView(slug: book.slug, filename: book.cover)
+                    .aspectRatio(2/3, contentMode: .fill)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+                    .opacity(isGenerating ? 0.75 : 1)
 
-            // Title + author
+                if isGenerating {
+                    Label("Generating", systemImage: "waveform")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.accentColor, in: Capsule())
+                        .padding(6)
+                }
+            }
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.title)
                     .font(.footnote.bold())
@@ -144,6 +163,12 @@ struct BookDetailView: View {
         }
     }
 
+    private func isChapterReady(_ ch: Chapter, slug: String) -> Bool {
+        guard !ch.audio.isEmpty else { return false }
+        let url = BookPaths.localURL(slug: slug, filename: ch.audio)
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
     private func chapterList(manifest: BookManifest) -> some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -153,12 +178,15 @@ struct BookDetailView: View {
                 Divider()
 
                 ForEach(Array(manifest.chapters.enumerated()), id: \.element.id) { idx, ch in
+                    let ready = isChapterReady(ch, slug: manifest.slug)
                     ChapterRow(
                         index: idx,
                         chapter: ch,
+                        isReady: ready,
                         isCurrent: player.book?.slug == manifest.slug && player.chapterIdx == idx,
                         isPlaying: player.isPlaying && player.book?.slug == manifest.slug && player.chapterIdx == idx
                     ) {
+                        guard ready else { return }
                         let progress = appState.libraryService.loadProgress(slug: manifest.slug)
                         let startTime = (player.book?.slug == manifest.slug && player.chapterIdx == idx)
                             ? progress.time : 0
@@ -257,6 +285,7 @@ struct BookDetailView: View {
 private struct ChapterRow: View {
     let index: Int
     let chapter: Chapter
+    let isReady: Bool
     let isCurrent: Bool
     let isPlaying: Bool
     let onTap: () -> Void
@@ -264,9 +293,12 @@ private struct ChapterRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 16) {
+                // Number / state indicator
                 ZStack {
                     Circle()
-                        .fill(isCurrent ? Color.accentColor : Color(.secondarySystemBackground))
+                        .fill(isCurrent ? Color.accentColor
+                              : isReady ? Color(.secondarySystemBackground)
+                              : Color(.systemFill))
                         .frame(width: 40, height: 40)
                     if isPlaying {
                         Image(systemName: "waveform")
@@ -277,6 +309,10 @@ private struct ChapterRow: View {
                         Image(systemName: "pause.fill")
                             .font(.footnote.bold())
                             .foregroundStyle(.white)
+                    } else if !isReady {
+                        Image(systemName: "hourglass")
+                            .font(.footnote)
+                            .foregroundStyle(.tertiary)
                     } else {
                         Text("\(index + 1)")
                             .font(.footnote.bold())
@@ -287,24 +323,33 @@ private struct ChapterRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(chapter.title)
                         .font(.body)
-                        .foregroundStyle(isCurrent ? Color.accentColor : .primary)
+                        .foregroundStyle(isCurrent ? Color.accentColor : isReady ? .primary : .secondary)
                         .lineLimit(2)
-                    Text(chapter.duration.formattedDurationLong)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if isReady && chapter.duration > 0 {
+                        Text(chapter.duration.formattedDurationLong)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if !isReady {
+                        Text("Generating…")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
 
                 Spacer()
 
-                Image(systemName: "play.fill")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                if isReady {
+                    Image(systemName: "play.fill")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!isReady)
     }
 }
 

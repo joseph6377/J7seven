@@ -137,6 +137,14 @@ final class TTSGenerationService {
         )
         completedChapterCount = 0
 
+        // Write stub manifest immediately → book appears in library before any chapter encodes
+        let writer = M4AWriter(
+            slug: slug, title: book.title, author: book.author,
+            coverData: book.coverData,
+            chapterTitles: selectedChapters.map(\.title)
+        )
+        try? writer.writeInitialManifest()
+
         // 2. Ensure model is ready
         state = .preparingModel
         if case .notDownloaded = supertonicService.modelState {
@@ -147,12 +155,6 @@ final class TTSGenerationService {
         // 3. Resume from saved progress if available
         var progress = TTSProgress.load(slug: slug)
                        ?? TTSProgress(slug: slug, voiceId: voice.id)
-
-        let writer = M4AWriter(
-            slug: slug, title: book.title, author: book.author,
-            coverData: book.coverData,
-            chapterTitles: selectedChapters.map(\.title)
-        )
 
         // 4. Request background execution time so iOS doesn't suspend mid-synthesis
         #if canImport(UIKit)
