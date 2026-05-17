@@ -14,6 +14,15 @@ enum GenerationState: Equatable {
     case failed(String)
 }
 
+/// Snapshot of a book mid-generation so the UI can offer playback of completed chapters.
+struct LiveBookInfo {
+    let slug: String
+    let title: String
+    let author: String
+    let coverFilename: String?   // relative to BookPaths.bookDirectory
+    let chapterTitles: [String]
+}
+
 @Observable
 @MainActor
 final class TTSGenerationService {
@@ -22,6 +31,12 @@ final class TTSGenerationService {
 
     /// True once the first paragraph buffer is ready — enables "Listen Now".
     var canPlayNow: Bool = false
+
+    /// Set when generation starts; cleared on completion or cancel.
+    var liveBook: LiveBookInfo?
+
+    /// How many chapters have been fully encoded to M4A so far.
+    var completedChapterCount: Int = 0
 
     /// Convenience — true whenever generation is in progress or paused.
     var isActive: Bool {
@@ -74,6 +89,8 @@ final class TTSGenerationService {
         engine.stop()
         state = .idle
         canPlayNow = false
+        liveBook = nil
+        completedChapterCount = 0
     }
 
     // MARK: - Generation pipeline
@@ -89,6 +106,16 @@ final class TTSGenerationService {
         }
 
         let slug = book.slug
+
+        // Expose book info so the banner can offer completed-chapter playback
+        liveBook = LiveBookInfo(
+            slug:           slug,
+            title:          book.title,
+            author:         book.author,
+            coverFilename:  book.coverData != nil ? "cover.jpg" : nil,
+            chapterTitles:  book.chapters.map(\.title)
+        )
+        completedChapterCount = 0
 
         // 2. Ensure model is ready
         state = .preparingModel
@@ -160,6 +187,7 @@ final class TTSGenerationService {
             // Encode all paragraphs for this chapter → single M4A file
             let wavPaths = progress.wavPaths(forChapter: chIdx)
             try? writer.finalizeChapter(chIdx, wavPaths: wavPaths)
+            completedChapterCount = chIdx + 1
         }
 
         // 6. Write manifest.json + cover → book appears in library
@@ -168,6 +196,8 @@ final class TTSGenerationService {
             try writer.finalizeBook()
             TTSProgress.delete(slug: slug)
             cleanupTempWAVs(slug: slug)
+            liveBook = nil
+            completedChapterCount = 0
             state = .done(slug: slug)
         } catch {
             state = .failed(error.localizedDescription)
