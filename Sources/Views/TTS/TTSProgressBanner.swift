@@ -308,10 +308,10 @@ private struct LiveChapterPickerView: View {
         let chapters: [Chapter] = (0..<service.completedChapterCount).map { idx in
             let audio = "ch-\(idx).m4a"
             let url = BookPaths.localURL(slug: info.slug, filename: audio)
-            let dur = AVURLAsset(url: url).duration.seconds
+            let dur = m4aDuration(url: url)
             let title = idx < info.chapterTitles.count ? info.chapterTitles[idx] : "Chapter \(idx + 1)"
             return Chapter(title: title, slug: "ch-\(idx)", audio: audio,
-                           html: "", duration: dur.isFinite ? dur : 0, paragraphs: [])
+                           html: "", duration: dur, paragraphs: [])
         }
         return BookManifest(
             id:       info.slug,
@@ -325,9 +325,15 @@ private struct LiveChapterPickerView: View {
     }
 
     private func chapterDuration(info: LiveBookInfo, idx: Int) -> String {
-        let audio = "ch-\(idx).m4a"
-        let url = BookPaths.localURL(slug: info.slug, filename: audio)
-        let dur = AVURLAsset(url: url).duration.seconds
-        return dur.isFinite && dur > 0 ? dur.formattedDurationLong : "—"
+        let url = BookPaths.localURL(slug: info.slug, filename: "ch-\(idx).m4a")
+        let dur = m4aDuration(url: url)
+        return dur > 0 ? dur.formattedDurationLong : "—"
+    }
+
+    /// Synchronously reads frame count from an M4A/AAC file via AVAudioFile.
+    private func m4aDuration(url: URL) -> Double {
+        guard let f = try? AVAudioFile(forReading: url) else { return 0 }
+        let rate = f.processingFormat.sampleRate
+        return rate > 0 ? Double(f.length) / rate : 0
     }
 }

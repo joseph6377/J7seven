@@ -107,13 +107,22 @@ final class TTSGenerationService {
 
         let slug = book.slug
 
+        // Write cover immediately so PlayerView can show it during live playback
+        var coverFilename: String? = nil
+        if let coverData = book.coverData {
+            let bookDir = BookPaths.bookDirectory(slug: slug)
+            let coverURL = bookDir.appendingPathComponent("cover.jpg")
+            try? coverData.write(to: coverURL)
+            coverFilename = "cover.jpg"
+        }
+
         // Expose book info so the banner can offer completed-chapter playback
         liveBook = LiveBookInfo(
-            slug:           slug,
-            title:          book.title,
-            author:         book.author,
-            coverFilename:  book.coverData != nil ? "cover.jpg" : nil,
-            chapterTitles:  book.chapters.map(\.title)
+            slug:          slug,
+            title:         book.title,
+            author:        book.author,
+            coverFilename: coverFilename,
+            chapterTitles: book.chapters.map(\.title)
         )
         completedChapterCount = 0
 

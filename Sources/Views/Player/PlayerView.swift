@@ -74,23 +74,41 @@ struct PlayerView: View {
         scheduleHide()
     }
 
+    // MARK: - Cover image (nil when file missing even if filename is set)
+
+    private var coverImage: UIImage? {
+        guard let cover = book.cover else { return nil }
+        return UIImage(contentsOfFile: BookPaths.localURL(slug: book.slug, filename: cover).path)
+    }
+
+    private var placeholderGradient: LinearGradient {
+        let hash = abs(book.slug.hashValue)
+        let palettes: [(Color, Color)] = [
+            (.purple, .indigo), (.teal, .blue), (.orange, .pink),
+            (.green, .teal), (.indigo, .purple), (.pink, .orange),
+        ]
+        let (a, b) = palettes[hash % palettes.count]
+        return LinearGradient(colors: [a, b], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
     // MARK: - Cover background
 
     private var coverBackground: some View {
         GeometryReader { geo in
             ZStack {
                 Color.black
-                if let cover = book.cover {
-                    let url = BookPaths.localURL(slug: book.slug, filename: cover)
-                    if let img = UIImage(contentsOfFile: url.path) {
-                        Image(uiImage: img)
-                            .resizable().scaledToFill()
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                            .blur(radius: 60)
-                            .opacity(0.5)
-                            .overlay(Color.black.opacity(0.5))
-                    }
+                if let img = coverImage {
+                    Image(uiImage: img)
+                        .resizable().scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                        .blur(radius: 60)
+                        .opacity(0.5)
+                        .overlay(Color.black.opacity(0.5))
+                } else {
+                    placeholderGradient
+                        .opacity(0.35)
+                        .overlay(Color.black.opacity(0.4))
                 }
             }
         }
@@ -102,21 +120,19 @@ struct PlayerView: View {
     private var coverLayer: some View {
         VStack(spacing: 0) {
             Spacer()
-            if let cover = book.cover {
-                let url = BookPaths.localURL(slug: book.slug, filename: cover)
-                if let img = UIImage(contentsOfFile: url.path) {
-                    Image(uiImage: img)
-                        .resizable().scaledToFit()
-                        .frame(maxWidth: 240, maxHeight: 320)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .shadow(color: .black.opacity(0.5), radius: 24, x: 0, y: 12)
-                }
+            if let img = coverImage {
+                Image(uiImage: img)
+                    .resizable().scaledToFit()
+                    .frame(maxWidth: 240, maxHeight: 320)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: .black.opacity(0.5), radius: 24, x: 0, y: 12)
             } else {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(0.1))
+                    .fill(placeholderGradient)
                     .frame(width: 200, height: 200)
-                    .overlay(Image(systemName: "book.closed.fill")
-                        .font(.system(size: 64)).foregroundStyle(.white.opacity(0.3)))
+                    .overlay(Image(systemName: "headphones")
+                        .font(.system(size: 56, weight: .light)).foregroundStyle(.white.opacity(0.5)))
+                    .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 12)
             }
             VStack(spacing: 4) {
                 Text(book.title)
