@@ -61,7 +61,7 @@ struct TTSProgressBanner: View {
         case .generating:                   return "Generating audiobook…"
         case .paused:                       return "Generation paused"
         case .finalizingAudio:              return "Finalizing audio…"
-        case .done(let slug):               return ""\(slug)" is ready"
+        case .done(let slug):               return "\"\(slug)\" is ready"
         case .failed(let msg):              return "Error: \(msg)"
         default:                            return ""
         }

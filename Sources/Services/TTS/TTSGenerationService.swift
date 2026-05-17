@@ -4,7 +4,7 @@ import AVFoundation
 import UIKit
 #endif
 
-enum GenerationState {
+enum GenerationState: Equatable {
     case idle
     case preparingModel
     case generating(chapter: Int, paragraph: Int, totalParagraphs: Int)
@@ -143,7 +143,7 @@ final class TTSGenerationService {
                 }
 
                 // Schedule buffer for immediate gapless playback
-                playerNode.scheduleBuffer(buffer)
+                await playerNode.scheduleBuffer(buffer)
                 if !playerNode.isPlaying { playerNode.play() }
                 canPlayNow = true
 

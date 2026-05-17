@@ -8,6 +8,7 @@ final class AppState {
     let supertonicService:    SupertonicService
     let ttsGenerationService: TTSGenerationService
     var books: [LibraryEntry] = []
+    var showPlayer = false
 
     init() {
         let lib    = LibraryService()

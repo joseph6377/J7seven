@@ -37,7 +37,7 @@ struct ModelDownloadView: View {
         case .downloading(let p):
             VStack(spacing: 8) {
                 ProgressView(value: p)
-                    .tint(.tint)
+                    .tint(.accentColor)
                     .frame(maxWidth: 280)
                 Text("\(Int(p * 100))%")
                     .font(.caption)
