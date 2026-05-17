@@ -1,6 +1,8 @@
 import Foundation
 import AVFoundation
+#if canImport(UIKit)
 import UIKit
+#endif
 
 enum GenerationState {
     case idle
@@ -18,13 +20,10 @@ final class TTSGenerationService {
 
     var state: GenerationState = .idle
 
-    /// True once the first paragraph is synthesised — enables "Listen Now".
+    /// True once the first paragraph buffer is ready — enables "Listen Now".
     var canPlayNow: Bool = false
 
-    /// The paragraph ID currently being read aloud (maps to PlayerService.currentParagraphId).
-    var currentlyPlayingParagraphId: String? = nil
-
-    /// Convenience for the UI — true whenever generation is in progress or paused.
+    /// Convenience — true whenever generation is in progress or paused.
     var isActive: Bool {
         switch state {
         case .idle, .done, .failed: return false
@@ -36,11 +35,13 @@ final class TTSGenerationService {
     private var generationTask: Task<Void, Never>?
     private var isPaused = false
 
-    // Audio engine for immediate gapless playback
+    // AVAudioEngine for immediate gapless playback during synthesis
     private let engine      = AVAudioEngine()
     private let playerNode  = AVAudioPlayerNode()
-    private let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                              sampleRate: 44100, channels: 1, interleaved: false)!
+    private let outputFormat = AVAudioFormat(
+        commonFormat: .pcmFormatFloat32,
+        sampleRate: 44100, channels: 1, interleaved: false
+    )!
 
     init(supertonicService: SupertonicService) {
         self.supertonicService = supertonicService
@@ -66,7 +67,6 @@ final class TTSGenerationService {
     func resume() {
         isPaused = false
         playerNode.play()
-        // Generation loop polls isPaused and continues automatically
     }
 
     func cancel() {
@@ -101,17 +101,22 @@ final class TTSGenerationService {
         var progress = TTSProgress.load(slug: slug)
                        ?? TTSProgress(slug: slug, voiceId: voice.id)
 
-        let writer = M4AWriter(slug: slug, title: book.title, author: book.author,
-                               coverData: book.coverData, chapters: book.chapters)
+        let writer = M4AWriter(
+            slug: slug, title: book.title, author: book.author,
+            coverData: book.coverData,
+            chapterTitles: book.chapters.map(\.title)
+        )
 
-        // 4. Request background execution time
+        // 4. Request background execution time so iOS doesn't suspend mid-synthesis
+        #if canImport(UIKit)
         var bgTask = UIBackgroundTaskIdentifier.invalid
         bgTask = UIApplication.shared.beginBackgroundTask {
             UIApplication.shared.endBackgroundTask(bgTask)
         }
         defer { UIApplication.shared.endBackgroundTask(bgTask) }
+        #endif
 
-        // 5. Synthesis loop
+        // 5. Synthesis loop — paragraph by paragraph, chapter by chapter
         for (chIdx, chapter) in book.chapters.enumerated() {
             let total = chapter.paragraphs.count
 
@@ -123,50 +128,38 @@ final class TTSGenerationService {
                     if Task.isCancelled { return }
                 }
 
-                // Skip paragraphs already done in a previous run
+                // Skip paragraphs already synthesised in a previous run
                 if progress.isCompleted(chapterIdx: chIdx, paragraphIdx: pIdx) { continue }
 
                 state = .generating(chapter: chIdx, paragraph: pIdx, totalParagraphs: total)
-
-                let paraId = "\(slug)-ch\(chIdx)-p\(pIdx)"
 
                 let buffer: AVAudioPCMBuffer
                 do {
                     buffer = try await supertonicService.synthesize(text: text, voice: voice)
                 } catch {
-                    print("TTS skipped \(paraId): \(error.localizedDescription)")
+                    // Skip bad paragraphs rather than aborting the whole book
+                    print("TTS skipped ch\(chIdx)-p\(pIdx): \(error.localizedDescription)")
                     continue
                 }
 
                 // Schedule buffer for immediate gapless playback
-                let capturedId = paraId
-                playerNode.scheduleBuffer(buffer) { [weak self] in
-                    Task { @MainActor [weak self] in
-                        self?.currentlyPlayingParagraphId = capturedId
-                    }
-                }
+                playerNode.scheduleBuffer(buffer)
                 if !playerNode.isPlaying { playerNode.play() }
                 canPlayNow = true
 
-                // Save temp WAV + progress
-                let wavPath = saveTempWAV(buffer: buffer, paraId: paraId)
-                let chStart = progress.completedParagraphs
-                    .filter { $0.chapterIdx == chIdx }
-                    .map(\.endTime).max() ?? 0
-                let duration = Double(buffer.frameLength) / buffer.format.sampleRate
-                let completed = TTSProgress.CompletedParagraph(
-                    chapterIdx: chIdx, paragraphIdx: pIdx,
-                    paragraphId: paraId,
-                    startTime: chStart, endTime: chStart + duration,
-                    tempWavPath: wavPath
+                // Cache WAV to disk for later M4A encoding
+                let wavPath = saveTempWAV(buffer: buffer, chIdx: chIdx, pIdx: pIdx, slug: slug)
+                progress.completedParagraphs.append(
+                    TTSProgress.CompletedParagraph(
+                        chapterIdx: chIdx, paragraphIdx: pIdx, tempWavPath: wavPath
+                    )
                 )
-                progress.completedParagraphs.append(completed)
                 try? progress.save()
             }
 
-            // Finalise chapter → M4A + HTML
-            let chParas = progress.completedParagraphs.filter { $0.chapterIdx == chIdx }
-            try? writer.finalizeChapter(chIdx, paragraphs: chParas)
+            // Encode all paragraphs for this chapter → single M4A file
+            let wavPaths = progress.wavPaths(forChapter: chIdx)
+            try? writer.finalizeChapter(chIdx, wavPaths: wavPaths)
         }
 
         // 6. Write manifest.json + cover → book appears in library
@@ -174,22 +167,30 @@ final class TTSGenerationService {
         do {
             try writer.finalizeBook()
             TTSProgress.delete(slug: slug)
+            cleanupTempWAVs(slug: slug)
             state = .done(slug: slug)
         } catch {
             state = .failed(error.localizedDescription)
         }
     }
 
-    // MARK: - Temp WAV save
+    // MARK: - Temp WAV helpers
 
-    private func saveTempWAV(buffer: AVAudioPCMBuffer, paraId: String) -> String {
+    private func saveTempWAV(buffer: AVAudioPCMBuffer, chIdx: Int, pIdx: Int, slug: String) -> String {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tts-wav", isDirectory: true)
+            .appendingPathComponent("tts-\(slug)", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("\(paraId).wav")
-        // TODO: Write buffer to WAV using AVAudioFile
-        // let file = try AVAudioFile(forWriting: url, settings: buffer.format.settings)
-        // try file.write(from: buffer)
+        let url = dir.appendingPathComponent("ch\(chIdx)-p\(pIdx).wav")
+        // TODO: Write buffer to WAV using AVAudioFile:
+        // if let file = try? AVAudioFile(forWriting: url, settings: buffer.format.settings) {
+        //     try? file.write(from: buffer)
+        // }
         return url.path
+    }
+
+    private func cleanupTempWAVs(slug: String) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tts-\(slug)", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
     }
 }

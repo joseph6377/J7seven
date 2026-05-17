@@ -1,27 +1,27 @@
 import Foundation
 import AVFoundation
 
-/// Converts per-paragraph synthesis output into BooksApp library format:
+/// Converts per-chapter synthesis output (cached WAV files) into BooksApp library format:
 ///   Documents/books/[slug]/
 ///     manifest.json
 ///     cover.jpg          (if extracted)
 ///     ch-0.m4a
-///     ch-0.html
 ///     ch-1.m4a  ...
+///
+/// Pure audio — no HTML files, no paragraph timing, no text at all.
 final class M4AWriter {
 
     private let slug: String
     private let title: String
     private let author: String
     private let coverData: Data?
-    private let chapters: [EpubChapter]
+    private let chapterTitles: [String]
     private var finalisedChapters: [FinalisedChapter] = []
 
     private struct FinalisedChapter {
         let index: Int
         let title: String
         let duration: Double
-        let paragraphs: [TTSProgress.CompletedParagraph]
     }
 
     private var bookDir: URL {
@@ -29,39 +29,31 @@ final class M4AWriter {
     }
 
     init(slug: String, title: String, author: String,
-         coverData: Data?, chapters: [EpubChapter]) {
-        self.slug      = slug
-        self.title     = title
-        self.author    = author
-        self.coverData = coverData
-        self.chapters  = chapters
+         coverData: Data?, chapterTitles: [String]) {
+        self.slug          = slug
+        self.title         = title
+        self.author        = author
+        self.coverData     = coverData
+        self.chapterTitles = chapterTitles
     }
 
     // MARK: - Per-chapter finalisation
 
     /// Call after all paragraphs in a chapter are synthesised.
-    func finalizeChapter(_ idx: Int, paragraphs: [TTSProgress.CompletedParagraph]) throws {
-        guard idx < chapters.count else { return }
-        let chapter   = chapters[idx]
-        let chDuration = paragraphs.map(\.endTime).max() ?? 0
-
+    /// `wavPaths` are the cached temp WAV files in paragraph order.
+    func finalizeChapter(_ idx: Int, wavPaths: [String]) throws {
         try FileManager.default.createDirectory(at: bookDir, withIntermediateDirectories: true)
 
         let m4aURL = bookDir.appendingPathComponent("ch-\(idx).m4a")
-        try encodeToM4A(paragraphs: paragraphs, outputURL: m4aURL)
+        let duration = try encodeToM4A(wavPaths: wavPaths, outputURL: m4aURL)
 
-        let htmlURL = bookDir.appendingPathComponent("ch-\(idx).html")
-        let html    = generateHTML(chapterIdx: idx, paragraphs: paragraphs,
-                                   texts: chapter.paragraphs)
-        try html.write(to: htmlURL, atomically: true, encoding: .utf8)
-
-        finalisedChapters.append(FinalisedChapter(index: idx, title: chapter.title,
-                                                   duration: chDuration,
-                                                   paragraphs: paragraphs))
+        let title = idx < chapterTitles.count ? chapterTitles[idx] : "Chapter \(idx + 1)"
+        finalisedChapters.append(FinalisedChapter(index: idx, title: title, duration: duration))
     }
 
     // MARK: - Book finalisation
 
+    /// Call once all chapters are done. Writes manifest.json and cover image.
     func finalizeBook() throws {
         try FileManager.default.createDirectory(at: bookDir, withIntermediateDirectories: true)
 
@@ -70,13 +62,15 @@ final class M4AWriter {
         }
 
         let sorted = finalisedChapters.sorted { $0.index < $1.index }
-        let manifestChapters: [Chapter] = sorted.map { ch in
-            let paras = ch.paragraphs.map { p in
-                Paragraph(id: p.paragraphId, start: p.startTime, end: p.endTime, wordEnds: [])
-            }
-            return Chapter(title: ch.title, slug: "ch-\(ch.index)",
-                           audio: "ch-\(ch.index).m4a", html: "ch-\(ch.index).html",
-                           duration: ch.duration, paragraphs: paras)
+        let manifestChapters = sorted.map { ch in
+            Chapter(
+                title:      ch.title,
+                slug:       "ch-\(ch.index)",
+                audio:      "ch-\(ch.index).m4a",
+                html:       "",           // pure audio — no reader
+                duration:   ch.duration,
+                paragraphs: []            // no text, no timing needed
+            )
         }
 
         let manifest = BookManifest(
@@ -95,11 +89,14 @@ final class M4AWriter {
 
     // MARK: - WAV → M4A encoding
 
-    private func encodeToM4A(paragraphs: [TTSProgress.CompletedParagraph],
-                              outputURL: URL) throws {
-        // TODO: Implement AVAssetWriter-based encoding.
+    /// Concatenates all paragraph WAV files into a single M4A chapter file.
+    /// Returns the total audio duration in seconds.
+    @discardableResult
+    private func encodeToM4A(wavPaths: [String], outputURL: URL) throws -> Double {
+        // TODO: Implement WAV → AAC → M4A encoding using AVAudioFile + AVAudioConverter.
         //
-        // Option A — AVAudioFile / AVAudioConverter (simpler):
+        // Recommended approach (Option A — simpler):
+        //
         //   let aacSettings: [String: Any] = [
         //       AVFormatIDKey:         kAudioFormatMPEG4AAC,
         //       AVSampleRateKey:       44100,
@@ -107,45 +104,26 @@ final class M4AWriter {
         //       AVEncoderBitRateKey:   64_000
         //   ]
         //   let outFile = try AVAudioFile(forWriting: outputURL, settings: aacSettings)
-        //   for p in paragraphs {
-        //       let wavFile = try AVAudioFile(forReading: URL(fileURLWithPath: p.tempWavPath))
-        //       let buf = AVAudioPCMBuffer(pcmFormat: wavFile.processingFormat,
-        //                                  frameCapacity: AVAudioFrameCount(wavFile.length))!
-        //       try wavFile.read(into: buf)
-        //       // convert pcm → aac then write — use AVAudioConverter
-        //       try outFile.write(from: buf)
+        //   var totalFrames: AVAudioFramePosition = 0
+        //
+        //   for path in wavPaths {
+        //       let inFile = try AVAudioFile(forReading: URL(fileURLWithPath: path))
+        //       let buf = AVAudioPCMBuffer(pcmFormat: inFile.processingFormat,
+        //                                  frameCapacity: AVAudioFrameCount(inFile.length))!
+        //       try inFile.read(into: buf)
+        //       try outFile.write(from: buf)      // AVAudioFile handles PCM→AAC internally
+        //       totalFrames += inFile.length
         //   }
+        //   return Double(totalFrames) / 44100.0
         //
-        // Option B — AVAssetWriter (more control, chapter markers possible):
-        //   Convert each AVAudioPCMBuffer → CMSampleBuffer, feed to AVAssetWriterInput.
-        //   See Apple docs for AVAudioPCMBuffer → CMSampleBuffer pattern.
+        // Note: AVAudioFile writing to .m4a with AAC settings performs the conversion
+        // internally on iOS. Test this first before reaching for AVAssetWriter.
         //
-        // Note: Test Option A first — it's much simpler and sufficient for the use case.
+        // If AVAudioFile can't write directly, use AVAudioConverter explicitly:
+        //   let converter = AVAudioConverter(from: pcmFormat, to: aacFormat)!
+        //   ... feed input blocks, write output CMSampleBuffers via AVAssetWriter.
 
         throw NSError(domain: "M4AWriter", code: 0,
                       userInfo: [NSLocalizedDescriptionKey: "TODO: implement WAV→M4A encoding"])
-    }
-
-    // MARK: - HTML generation
-
-    private func generateHTML(chapterIdx: Int,
-                               paragraphs: [TTSProgress.CompletedParagraph],
-                               texts: [String]) -> String {
-        var lines = ["<!DOCTYPE html><html><body>"]
-        for (i, para) in paragraphs.enumerated() {
-            let text = i < texts.count ? texts[i].xmlEscaped : ""
-            lines.append("<p id=\"\(para.paragraphId)\">\(text)</p>")
-        }
-        lines.append("</body></html>")
-        return lines.joined(separator: "\n")
-    }
-}
-
-private extension String {
-    var xmlEscaped: String {
-        self.replacingOccurrences(of: "&",  with: "&amp;")
-            .replacingOccurrences(of: "<",  with: "&lt;")
-            .replacingOccurrences(of: ">",  with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
     }
 }

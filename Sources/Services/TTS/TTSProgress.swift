@@ -7,12 +7,10 @@ struct TTSProgress: Codable {
     let voiceId: String
     var completedParagraphs: [CompletedParagraph] = []
 
+    /// Minimal record — just enough to skip re-synthesis and locate the cached WAV.
     struct CompletedParagraph: Codable {
         let chapterIdx: Int
         let paragraphIdx: Int
-        let paragraphId: String    // matches <p id=""> in HTML and Paragraph.id in manifest
-        let startTime: Double      // cumulative seconds within chapter
-        let endTime: Double
         let tempWavPath: String    // absolute path to cached WAV on disk
     }
 
@@ -45,5 +43,13 @@ struct TTSProgress: Codable {
         completedParagraphs.contains {
             $0.chapterIdx == chapterIdx && $0.paragraphIdx == paragraphIdx
         }
+    }
+
+    /// All cached WAV paths for a given chapter, in paragraph order.
+    func wavPaths(forChapter idx: Int) -> [String] {
+        completedParagraphs
+            .filter { $0.chapterIdx == idx }
+            .sorted { $0.paragraphIdx < $1.paragraphIdx }
+            .map(\.tempWavPath)
     }
 }
