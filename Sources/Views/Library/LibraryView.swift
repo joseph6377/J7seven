@@ -16,6 +16,10 @@ struct LibraryView: View {
         .onChange(of: appState.ttsGenerationService.state) { _, newState in
             if case .done = newState { appState.refresh() }
         }
+        // Refresh library each time a chapter is encoded so the book appears progressively
+        .onChange(of: appState.ttsGenerationService.completedChapterCount) { _, _ in
+            appState.refresh()
+        }
     }
 
     // MARK: - Grid

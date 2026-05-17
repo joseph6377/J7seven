@@ -67,10 +67,11 @@ final class TTSGenerationService {
 
     // MARK: - Public API
 
-    func generate(epubURL: URL, voice: TTSVoice) {
+    /// `selectedIndices` — which EPUB chapter indices to synthesise (nil = all).
+    func generate(epubURL: URL, voice: TTSVoice, selectedIndices: Set<Int>? = nil) {
         guard case .idle = state else { return }
         isPaused = false
-        generationTask = Task { await runGeneration(epubURL: epubURL, voice: voice) }
+        generationTask = Task { await runGeneration(epubURL: epubURL, voice: voice, selectedIndices: selectedIndices) }
     }
 
     func pause() {
@@ -95,7 +96,7 @@ final class TTSGenerationService {
 
     // MARK: - Generation pipeline
 
-    private func runGeneration(epubURL: URL, voice: TTSVoice) async {
+    private func runGeneration(epubURL: URL, voice: TTSVoice, selectedIndices: Set<Int>?) async {
         // 1. Parse EPUB text
         let book: EpubTextParser.ParsedBook
         do {
@@ -116,13 +117,23 @@ final class TTSGenerationService {
             coverFilename = "cover.jpg"
         }
 
+        // Filter to selected chapters only (re-indexed 0..N-1)
+        let selectedChapters: [EpubChapter]
+        if let indices = selectedIndices {
+            selectedChapters = book.chapters.enumerated()
+                .filter { indices.contains($0.offset) }
+                .map(\.element)
+        } else {
+            selectedChapters = book.chapters
+        }
+
         // Expose book info so the banner can offer completed-chapter playback
         liveBook = LiveBookInfo(
             slug:          slug,
             title:         book.title,
             author:        book.author,
             coverFilename: coverFilename,
-            chapterTitles: book.chapters.map(\.title)
+            chapterTitles: selectedChapters.map(\.title)
         )
         completedChapterCount = 0
 
@@ -140,7 +151,7 @@ final class TTSGenerationService {
         let writer = M4AWriter(
             slug: slug, title: book.title, author: book.author,
             coverData: book.coverData,
-            chapterTitles: book.chapters.map(\.title)
+            chapterTitles: selectedChapters.map(\.title)
         )
 
         // 4. Request background execution time so iOS doesn't suspend mid-synthesis
@@ -153,7 +164,7 @@ final class TTSGenerationService {
         #endif
 
         // 5. Synthesis loop — paragraph by paragraph, chapter by chapter
-        for (chIdx, chapter) in book.chapters.enumerated() {
+        for (chIdx, chapter) in selectedChapters.enumerated() {
             let total = chapter.paragraphs.count
 
             for (pIdx, text) in chapter.paragraphs.enumerated() {
@@ -196,6 +207,7 @@ final class TTSGenerationService {
             // Encode all paragraphs for this chapter → single M4A file
             let wavPaths = progress.wavPaths(forChapter: chIdx)
             try? writer.finalizeChapter(chIdx, wavPaths: wavPaths)
+            try? writer.writePartialManifest()   // book appears in library immediately
             completedChapterCount = chIdx + 1
         }
 

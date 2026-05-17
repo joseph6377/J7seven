@@ -51,6 +51,16 @@ final class M4AWriter {
         finalisedChapters.append(FinalisedChapter(index: idx, title: title, duration: duration))
     }
 
+    // MARK: - Partial manifest (written after each chapter for live library updates)
+
+    /// Writes manifest.json with only the chapters finalized so far.
+    /// Safe to call repeatedly — each call overwrites the previous partial manifest.
+    func writePartialManifest() throws {
+        try FileManager.default.createDirectory(at: bookDir, withIntermediateDirectories: true)
+        let data = try JSONEncoder().encode(buildManifest())
+        try data.write(to: bookDir.appendingPathComponent("manifest.json"), options: .atomic)
+    }
+
     // MARK: - Book finalisation
 
     /// Call once all chapters are done. Writes manifest.json and cover image.
@@ -60,31 +70,28 @@ final class M4AWriter {
         if let coverData {
             try coverData.write(to: bookDir.appendingPathComponent("cover.jpg"))
         }
+        let data = try JSONEncoder().encode(buildManifest())
+        try data.write(to: bookDir.appendingPathComponent("manifest.json"), options: .atomic)
+    }
 
+    // MARK: - Shared manifest builder
+
+    private func buildManifest() -> BookManifest {
         let sorted = finalisedChapters.sorted { $0.index < $1.index }
-        let manifestChapters = sorted.map { ch in
-            Chapter(
-                title:      ch.title,
-                slug:       "ch-\(ch.index)",
-                audio:      "ch-\(ch.index).m4a",
-                html:       "",           // pure audio — no reader
-                duration:   ch.duration,
-                paragraphs: []            // no text, no timing needed
-            )
+        let chapters = sorted.map { ch in
+            Chapter(title: ch.title, slug: "ch-\(ch.index)",
+                    audio: "ch-\(ch.index).m4a", html: "",
+                    duration: ch.duration, paragraphs: [])
         }
-
-        let manifest = BookManifest(
-            id:       UUID().uuidString,
+        return BookManifest(
+            id:       slug,
             slug:     slug,
             title:    title,
             author:   author,
             cover:    coverData != nil ? "cover.jpg" : nil,
             duration: sorted.reduce(0) { $0 + $1.duration },
-            chapters: manifestChapters
+            chapters: chapters
         )
-
-        let data = try JSONEncoder().encode(manifest)
-        try data.write(to: bookDir.appendingPathComponent("manifest.json"), options: .atomic)
     }
 
     // MARK: - WAV → M4A encoding

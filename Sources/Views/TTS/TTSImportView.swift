@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Sheet shown after the user picks a text-only EPUB.
-/// Previews book metadata, lets the user choose a voice, then kicks off generation.
 struct TTSImportView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -9,9 +7,10 @@ struct TTSImportView: View {
     let generationService: TTSGenerationService
     let supertonicService: SupertonicService
 
-    @State private var parsedBook: EpubTextParser.ParsedBook? = nil
-    @State private var parseError: String? = nil
+    @State private var parsedBook: EpubTextParser.ParsedBook?
+    @State private var parseError: String?
     @State private var selectedVoice: TTSVoice = .default
+    @State private var selectedIndices: Set<Int> = []
     @State private var showModelDownload = false
 
     private let voices = TTSVoice.loadAll()
@@ -30,91 +29,177 @@ struct TTSImportView: View {
         .task { await parseEPUB() }
         .sheet(isPresented: $showModelDownload) {
             ModelDownloadView(service: supertonicService) {
-                // Model is ready — auto-start generation
                 dismiss()
-                generationService.generate(epubURL: epubURL, voice: selectedVoice)
+                generationService.generate(epubURL: epubURL, voice: selectedVoice,
+                                           selectedIndices: selectedIndices)
             }
         }
     }
+
+    // MARK: - Content switcher
 
     @ViewBuilder
     private var content: some View {
         if let error = parseError {
             errorView(error)
         } else if let book = parsedBook {
-            bookPreview(book)
+            importForm(book)
         } else {
-            ProgressView("Reading EPUB…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 16) {
+                ProgressView()
+                Text("Reading EPUB…").foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    // MARK: - Book preview
+    // MARK: - Main form
 
-    private func bookPreview(_ book: EpubTextParser.ParsedBook) -> some View {
+    private func importForm(_ book: EpubTextParser.ParsedBook) -> some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Cover / icon
-                    if let coverData = book.coverData,
-                       let uiImage = UIImage(data: coverData) {
-                        Image(uiImage: uiImage)
-                            .resizable().scaledToFill()
-                            .frame(width: 120, height: 120)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                    } else {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.secondarySystemBackground))
-                            .frame(width: 120, height: 120)
-                            .overlay(Image(systemName: "book.closed")
-                                .font(.system(size: 48)).foregroundStyle(.tertiary))
-                    }
-
-                    // Metadata
-                    VStack(spacing: 4) {
-                        Text(book.title).font(.title3.bold()).multilineTextAlignment(.center)
-                        Text(book.author).foregroundStyle(.secondary)
-                        Text("\(book.chapters.count) chapters · \(book.chapters.flatMap(\.paragraphs).count) paragraphs")
-                            .font(.caption).foregroundStyle(.tertiary)
-                    }
+                VStack(spacing: 0) {
+                    // Header — cover + metadata
+                    bookHeader(book)
+                        .padding(.bottom, 24)
 
                     Divider()
 
-                    // Voice picker
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Voice").font(.headline)
+                    // Chapter selection
+                    chapterSection(book)
 
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            ForEach(voices) { voice in
-                                VoiceCard(voice: voice, isSelected: selectedVoice == voice)
-                                    .onTapGesture { selectedVoice = voice }
-                            }
-                        }
-                    }
+                    Divider()
+
+                    // Voice selection
+                    voiceSection
+                        .padding(.bottom, 24)
                 }
-                .padding(24)
             }
 
             // Generate button
-            Button(action: startGeneration) {
-                Label("Generate & Play", systemImage: "waveform")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            }
-            .buttonStyle(.borderedProminent)
-            .padding()
+            generateButton
         }
     }
 
-    // MARK: - Error state
+    // MARK: - Book header
+
+    private func bookHeader(_ book: EpubTextParser.ParsedBook) -> some View {
+        VStack(spacing: 12) {
+            Group {
+                if let data = book.coverData, let img = UIImage(data: data) {
+                    Image(uiImage: img)
+                        .resizable().scaledToFill()
+                        .frame(width: 100, height: 150)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
+                } else {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(LinearGradient(colors: [.purple, .indigo],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 100, height: 150)
+                        .overlay(Image(systemName: "headphones")
+                            .font(.system(size: 36, weight: .light)).foregroundStyle(.white.opacity(0.6)))
+                }
+            }
+            .padding(.top, 24)
+
+            VStack(spacing: 3) {
+                Text(book.title).font(.title3.bold()).multilineTextAlignment(.center)
+                Text(book.author).foregroundStyle(.secondary).font(.subheadline)
+            }
+            .padding(.horizontal, 24)
+        }
+    }
+
+    // MARK: - Chapter selection
+
+    private func chapterSection(_ book: EpubTextParser.ParsedBook) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Chapters")
+                        .font(.headline)
+                    Text("\(selectedIndices.count) of \(book.chapters.count) selected")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(selectedIndices.count == book.chapters.count ? "Deselect All" : "Select All") {
+                    if selectedIndices.count == book.chapters.count {
+                        selectedIndices = []
+                    } else {
+                        selectedIndices = Set(0..<book.chapters.count)
+                    }
+                }
+                .font(.subheadline)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+
+            ForEach(Array(book.chapters.enumerated()), id: \.offset) { idx, ch in
+                ChapterToggleRow(
+                    index: idx,
+                    chapter: ch,
+                    isSelected: selectedIndices.contains(idx)
+                ) {
+                    if selectedIndices.contains(idx) {
+                        selectedIndices.remove(idx)
+                    } else {
+                        selectedIndices.insert(idx)
+                    }
+                }
+                if idx < book.chapters.count - 1 {
+                    Divider().padding(.leading, 56)
+                }
+            }
+        }
+        .padding(.bottom, 8)
+    }
+
+    // MARK: - Voice section
+
+    private var voiceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Voice")
+                .font(.headline)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                ForEach(voices) { voice in
+                    VoiceCard(voice: voice, isSelected: selectedVoice == voice)
+                        .onTapGesture { selectedVoice = voice }
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    // MARK: - Generate button
+
+    private var generateButton: some View {
+        Button(action: startGeneration) {
+            let count = selectedIndices.count
+            Label(count == 0 ? "Select chapters above" : "Generate \(count) Chapter\(count == 1 ? "" : "s")",
+                  systemImage: "waveform")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding()
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(selectedIndices.isEmpty)
+        .padding()
+        .background(.regularMaterial)
+    }
+
+    // MARK: - Error
 
     private func errorView(_ msg: String) -> some View {
         VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle").font(.system(size: 48)).foregroundStyle(.orange)
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 48)).foregroundStyle(.orange)
             Text("Couldn't Read EPUB").font(.headline)
-            Text(msg).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                .padding(.horizontal)
+            Text(msg).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -122,21 +207,72 @@ struct TTSImportView: View {
     // MARK: - Actions
 
     private func parseEPUB() async {
-        do { parsedBook = try EpubTextParser.parse(epubURL: epubURL) }
-        catch { parseError = error.localizedDescription }
+        do {
+            let book = try EpubTextParser.parse(epubURL: epubURL)
+            parsedBook = book
+            // Auto-select content chapters; deselect common front-matter by default
+            selectedIndices = Set(book.chapters.indices.filter { !isFrontMatter(book.chapters[$0].title) })
+        } catch {
+            parseError = error.localizedDescription
+        }
+    }
+
+    private func isFrontMatter(_ title: String) -> Bool {
+        let t = title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let frontMatterKeywords = [
+            "cover", "title page", "also by", "copyright", "dedication",
+            "epigraph", "table of contents", "contents", "half title",
+            "about the author", "acknowledgment", "bibliography", "index",
+            "notes", "permissions", "colophon", "frontispiece"
+        ]
+        return frontMatterKeywords.contains(where: { t == $0 || t.hasPrefix($0) })
     }
 
     private func startGeneration() {
+        guard !selectedIndices.isEmpty else { return }
         switch supertonicService.modelState {
-        case .notDownloaded, .error:
-            showModelDownload = true
-        case .loading, .downloading:
-            // Model is in progress — show download sheet which auto-starts when ready
+        case .notDownloaded, .error, .loading, .downloading:
             showModelDownload = true
         case .ready:
             dismiss()
-            generationService.generate(epubURL: epubURL, voice: selectedVoice)
+            generationService.generate(epubURL: epubURL, voice: selectedVoice,
+                                       selectedIndices: selectedIndices)
         }
+    }
+}
+
+// MARK: - Chapter toggle row
+
+private struct ChapterToggleRow: View {
+    let index: Int
+    let chapter: EpubChapter
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 14) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color(.tertiaryLabel))
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(chapter.title)
+                        .foregroundStyle(isSelected ? .primary : .secondary)
+                        .lineLimit(2)
+                    Text("\(chapter.paragraphs.count) paragraph\(chapter.paragraphs.count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
