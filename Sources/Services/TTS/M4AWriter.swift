@@ -93,37 +93,27 @@ final class M4AWriter {
     /// Returns the total audio duration in seconds.
     @discardableResult
     private func encodeToM4A(wavPaths: [String], outputURL: URL) throws -> Double {
-        // TODO: Implement WAV → AAC → M4A encoding using AVAudioFile + AVAudioConverter.
-        //
-        // Recommended approach (Option A — simpler):
-        //
-        //   let aacSettings: [String: Any] = [
-        //       AVFormatIDKey:         kAudioFormatMPEG4AAC,
-        //       AVSampleRateKey:       44100,
-        //       AVNumberOfChannelsKey: 1,
-        //       AVEncoderBitRateKey:   64_000
-        //   ]
-        //   let outFile = try AVAudioFile(forWriting: outputURL, settings: aacSettings)
-        //   var totalFrames: AVAudioFramePosition = 0
-        //
-        //   for path in wavPaths {
-        //       let inFile = try AVAudioFile(forReading: URL(fileURLWithPath: path))
-        //       let buf = AVAudioPCMBuffer(pcmFormat: inFile.processingFormat,
-        //                                  frameCapacity: AVAudioFrameCount(inFile.length))!
-        //       try inFile.read(into: buf)
-        //       try outFile.write(from: buf)      // AVAudioFile handles PCM→AAC internally
-        //       totalFrames += inFile.length
-        //   }
-        //   return Double(totalFrames) / 44100.0
-        //
-        // Note: AVAudioFile writing to .m4a with AAC settings performs the conversion
-        // internally on iOS. Test this first before reaching for AVAssetWriter.
-        //
-        // If AVAudioFile can't write directly, use AVAudioConverter explicitly:
-        //   let converter = AVAudioConverter(from: pcmFormat, to: aacFormat)!
-        //   ... feed input blocks, write output CMSampleBuffers via AVAssetWriter.
+        let aacSettings: [String: Any] = [
+            AVFormatIDKey:         kAudioFormatMPEG4AAC,
+            AVSampleRateKey:       44100,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderBitRateKey:   64_000,
+        ]
+        let outFile = try AVAudioFile(forWriting: outputURL, settings: aacSettings)
+        var totalFrames: AVAudioFramePosition = 0
 
-        throw NSError(domain: "M4AWriter", code: 0,
-                      userInfo: [NSLocalizedDescriptionKey: "TODO: implement WAV→M4A encoding"])
+        for path in wavPaths {
+            let inURL  = URL(fileURLWithPath: path)
+            let inFile = try AVAudioFile(forReading: inURL)
+            let capacity = AVAudioFrameCount(inFile.length)
+            guard let buf = AVAudioPCMBuffer(
+                    pcmFormat: inFile.processingFormat,
+                    frameCapacity: capacity) else { continue }
+            try inFile.read(into: buf)
+            try outFile.write(from: buf)    // AVAudioFile converts PCM→AAC internally
+            totalFrames += inFile.length
+        }
+
+        return Double(totalFrames) / 44100.0
     }
 }

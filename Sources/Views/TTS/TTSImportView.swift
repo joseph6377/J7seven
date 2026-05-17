@@ -127,12 +127,16 @@ struct TTSImportView: View {
     }
 
     private func startGeneration() {
-        if case .notDownloaded = supertonicService.modelState {
+        switch supertonicService.modelState {
+        case .notDownloaded, .error:
             showModelDownload = true
-            return
+        case .loading, .downloading:
+            // Model is in progress — show download sheet which auto-starts when ready
+            showModelDownload = true
+        case .ready:
+            dismiss()
+            generationService.generate(epubURL: epubURL, voice: selectedVoice)
         }
-        dismiss()
-        generationService.generate(epubURL: epubURL, voice: selectedVoice)
     }
 }
 

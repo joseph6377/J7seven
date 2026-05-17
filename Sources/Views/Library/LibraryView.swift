@@ -23,8 +23,7 @@ struct LibraryView: View {
     private var bookList: some View {
         List(appState.books) { book in
             NavigationLink {
-                // TODO: BookDetailView / PlayerView
-                Text(book.title)
+                BookPlayerLink(entry: book)
             } label: {
                 BookRow(book: book)
             }
@@ -57,6 +56,33 @@ struct LibraryView: View {
     }
 }
 
+// MARK: - Book player link (loads manifest + progress, then shows PlayerView)
+
+private struct BookPlayerLink: View {
+    @Environment(AppState.self) private var appState
+    let entry: LibraryEntry
+
+    var body: some View {
+        Group {
+            if appState.playerService.book?.slug == entry.slug {
+                PlayerView()
+            } else {
+                ProgressView()
+                    .task {
+                        guard let manifest = appState.libraryService.manifest(slug: entry.slug)
+                        else { return }
+                        let progress = appState.libraryService.loadProgress(slug: entry.slug)
+                        appState.playerService.play(
+                            book: manifest,
+                            chapterIdx: progress.chapterIdx,
+                            time: progress.time)
+                    }
+            }
+        }
+        .navigationBarBackButtonHidden(true)
+    }
+}
+
 // MARK: - Book row
 
 private struct BookRow: View {
@@ -65,13 +91,9 @@ private struct BookRow: View {
     var body: some View {
         HStack(spacing: 12) {
             // Cover
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color(.secondarySystemBackground))
+            CoverImageView(slug: book.slug, cover: book.cover)
                 .frame(width: 44, height: 44)
-                .overlay(
-                    Image(systemName: "book.closed")
-                        .foregroundStyle(.tertiary)
-                )
+                .clipShape(RoundedRectangle(cornerRadius: 6))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.title)

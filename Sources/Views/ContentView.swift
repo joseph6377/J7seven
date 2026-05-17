@@ -34,10 +34,10 @@ struct ContentView: View {
         // Generation progress banner sits above tab bar
         .safeAreaInset(edge: .bottom) {
             if appState.ttsGenerationService.isActive {
-                TTSProgressBanner(service: appState.ttsGenerationService) {
-                    // TODO: open player for in-progress book
-                }
-                .padding(.bottom, 8)
+                // Audio plays automatically via AVAudioEngine in TTSGenerationService;
+                // onListenNow is a no-op — the user is already hearing it.
+                TTSProgressBanner(service: appState.ttsGenerationService) {}
+                    .padding(.bottom, 8)
             }
         }
     }

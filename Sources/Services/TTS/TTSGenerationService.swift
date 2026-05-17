@@ -181,10 +181,9 @@ final class TTSGenerationService {
             .appendingPathComponent("tts-\(slug)", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("ch\(chIdx)-p\(pIdx).wav")
-        // TODO: Write buffer to WAV using AVAudioFile:
-        // if let file = try? AVAudioFile(forWriting: url, settings: buffer.format.settings) {
-        //     try? file.write(from: buffer)
-        // }
+        if let file = try? AVAudioFile(forWriting: url, settings: buffer.format.settings) {
+            try? file.write(from: buffer)
+        }
         return url.path
     }
 
