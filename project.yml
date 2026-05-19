@@ -27,13 +27,13 @@ targets:
       - path: BooksAppV2/Assets.xcassets
     resources:
       - path: Resources
-    packages:
+    dependencies:
       - package: onnxruntime
         product: onnxruntime
     info:
       path: BooksAppV2/Info.plist
       properties:
-        CFBundleDisplayName: BooksApp
+        CFBundleDisplayName: J7seven
         CFBundleName: BooksAppV2
         CFBundleIdentifier: in.josepht.booksappv2
         CFBundleVersion: "1"
