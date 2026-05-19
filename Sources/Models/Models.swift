@@ -1,59 +1,45 @@
 import Foundation
 
-struct LibraryEntry: Codable, Identifiable, Hashable {
-    let id: String
-    let slug: String
+// Persisted (text + cursor only — no audio)
+struct SavedDocument: Codable, Identifiable {
+    let id: UUID                  // stable ID, used as filename
     let title: String
-    let author: String
-    let cover: String?
-    let duration: Double
-    let chapterCount: Int
+    let author: String?
+    let coverImageData: Data?     // small JPEG, ≤200 KB, optional
+    let importedAt: Date
+    var lastOpenedAt: Date
+    var chapters: [ChapterText]   // text only
+    var cursor: PlaybackCursor
+}
+
+struct ChapterText: Codable, Identifiable {
+    let index: Int
+    let title: String
+    let paragraphs: [String]      // plain text, pre-split
+    
+    var id: Int { index }
+}
+
+struct PlaybackCursor: Codable {
+    var chapterIndex: Int = 0
+    var paragraphIndex: Int = 0      // paragraph user last reached
+}
+
+// Minimal entry for the library list
+struct LibraryEntry: Codable, Identifiable, Hashable {
+    let id: UUID
+    let title: String
+    let author: String?
+    let lastOpenedAt: Date
 }
 
 extension LibraryEntry {
-    init(from manifest: BookManifest) {
-        id           = manifest.id
-        slug         = manifest.slug
-        title        = manifest.title
-        author       = manifest.author
-        cover        = manifest.cover
-        duration     = manifest.duration > 0 ? manifest.duration : manifest.chapters.reduce(0) { $0 + $1.duration }
-        chapterCount = manifest.chapters.count
+    init(from doc: SavedDocument) {
+        id = doc.id
+        title = doc.title
+        author = doc.author
+        lastOpenedAt = doc.lastOpenedAt
     }
-}
-
-struct BookManifest: Codable, Identifiable {
-    let id: String
-    let slug: String
-    let title: String
-    let author: String
-    let cover: String?
-    let duration: Double
-    let chapters: [Chapter]
-}
-
-struct Chapter: Codable, Identifiable {
-    let title: String
-    let slug: String
-    let audio: String
-    let html: String
-    let duration: Double
-    let paragraphs: [Paragraph]
-
-    var id: String { slug }
-}
-
-struct Paragraph: Codable, Identifiable {
-    let id: String
-    let start: Double
-    let end: Double
-    let wordEnds: [Double]
-}
-
-struct ReadingProgress: Codable {
-    var chapterIdx: Int = 0
-    var time: Double = 0
-    var updatedAt: Date = .now
 }
 
 extension Double {
@@ -68,7 +54,9 @@ extension Double {
     var formattedDurationLong: String {
         let h = Int(self) / 3600
         let m = Int(self) % 3600 / 60
+        let s = Int(self) % 60
         if h > 0 { return "\(h)h \(m)m" }
-        return "\(m)m"
+        if m > 0 { return "\(m)m" }
+        return "\(s)s"
     }
 }

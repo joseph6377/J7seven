@@ -1,17 +1,13 @@
 import SwiftUI
 
 struct CoverImageView: View {
-    let slug: String
-    let filename: String?
+    @Environment(AppState.self) private var appState
+    let id: UUID
+    @State private var coverData: Data?
 
-    private var image: UIImage? {
-        guard let filename else { return nil }
-        return UIImage(contentsOfFile: BookPaths.localURL(slug: slug, filename: filename).path)
-    }
-
-    // Deterministic gradient per book based on slug
+    // Deterministic gradient per book based on id
     private var placeholderGradient: LinearGradient {
-        let hash = abs(slug.hashValue)
+        let hash = abs(id.hashValue)
         let palettes: [(Color, Color)] = [
             (.purple, .indigo),
             (.teal, .blue),
@@ -25,17 +21,26 @@ struct CoverImageView: View {
     }
 
     var body: some View {
-        if let img = image {
-            Image(uiImage: img)
-                .resizable()
-                .scaledToFill()
-        } else {
-            placeholderGradient
-                .overlay(
-                    Image(systemName: "headphones")
-                        .font(.system(size: 28, weight: .light))
-                        .foregroundStyle(.white.opacity(0.5))
-                )
+        Group {
+            if let data = coverData, let img = UIImage(data: data) {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                placeholderGradient
+                    .overlay(
+                        Image(systemName: "book")
+                            .font(.system(size: 28, weight: .light))
+                            .foregroundStyle(.white.opacity(0.5))
+                    )
+            }
+        }
+        .task {
+            // Loading the full document just for the cover might be expensive
+            // but for v1 it's probably okay if the cover data is small.
+            if let doc = appState.libraryService.loadDocument(id: id) {
+                coverData = doc.coverImageData
+            }
         }
     }
 }

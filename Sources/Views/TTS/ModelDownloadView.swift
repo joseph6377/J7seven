@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// Shown the first time a TTS generation is attempted and the ONNX model isn't downloaded.
-/// Dismisses automatically when the download completes.
 struct ModelDownloadView: View {
     @Environment(\.dismiss) private var dismiss
-    let service: SupertonicService
+    let synthesizer: SupertonicSynthesizer
     var onReady: () -> Void = {}
 
     var body: some View {
@@ -28,12 +26,12 @@ struct ModelDownloadView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(36)
-        .task { try? await service.downloadModel() }
+        .task { try? await synthesizer.downloadModel() }
     }
 
     @ViewBuilder
     private var progressSection: some View {
-        switch service.modelState {
+        switch synthesizer.modelState {
         case .downloading(let p):
             VStack(spacing: 8) {
                 ProgressView(value: p)
@@ -57,7 +55,7 @@ struct ModelDownloadView: View {
                 Label("Download failed", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
                 Text(msg).font(.caption).foregroundStyle(.secondary)
-                Button("Retry") { Task { try? await service.downloadModel() } }
+                Button("Retry") { Task { try? await synthesizer.downloadModel() } }
                     .buttonStyle(.borderedProminent)
             }
         default:

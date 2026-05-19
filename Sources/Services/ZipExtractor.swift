@@ -40,7 +40,7 @@ enum ZipExtractor {
                 continue
             }
 
-            let version        = data.u16(pos + 4)
+            _                  = data.u16(pos + 4)
             let flags          = data.u16(pos + 6)
             let compression    = data.u16(pos + 8)
             let compressedSize = Int(data.u32(pos + 18))

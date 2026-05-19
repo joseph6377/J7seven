@@ -3,48 +3,40 @@ import Foundation
 @Observable
 final class LibraryService: @unchecked Sendable {
     private let decoder = JSONDecoder()
+    private let encoder = JSONEncoder()
 
     func scanLocalLibrary() -> [LibraryEntry] {
-        let root = BookPaths.booksRoot()
+        let root = LibraryPaths.libraryRoot()
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: root,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: .skipsHiddenFiles
         ) else { return [] }
 
-        return contents.compactMap { dir -> LibraryEntry? in
-            var isDir: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else { return nil }
-            let manifestURL = dir.appendingPathComponent("manifest.json")
-            guard let data = try? Data(contentsOf: manifestURL),
-                  let manifest = try? decoder.decode(BookManifest.self, from: data)
+        return contents.compactMap { file -> LibraryEntry? in
+            guard file.pathExtension == "json" else { return nil }
+            guard let data = try? Data(contentsOf: file),
+                  let doc = try? decoder.decode(SavedDocument.self, from: data)
             else { return nil }
-            return LibraryEntry(from: manifest)
+            return LibraryEntry(from: doc)
         }
-        .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        .sorted { $0.lastOpenedAt > $1.lastOpenedAt }
     }
 
-    func manifest(slug: String) -> BookManifest? {
-        let url = BookPaths.bookDirectory(slug: slug).appendingPathComponent("manifest.json")
+    func loadDocument(id: UUID) -> SavedDocument? {
+        let url = LibraryPaths.documentURL(id: id)
         guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? decoder.decode(BookManifest.self, from: data)
+        return try? decoder.decode(SavedDocument.self, from: data)
     }
 
-    func loadProgress(slug: String) -> ReadingProgress {
-        let key = "progress:\(slug)"
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let p = try? decoder.decode(ReadingProgress.self, from: data)
-        else { return ReadingProgress() }
-        return p
+    func saveDocument(_ doc: SavedDocument) {
+        let url = LibraryPaths.documentURL(id: doc.id)
+        guard let data = try? encoder.encode(doc) else { return }
+        try? data.write(to: url, options: .atomic)
     }
 
-    func saveProgress(_ progress: ReadingProgress, slug: String) {
-        guard let data = try? JSONEncoder().encode(progress) else { return }
-        UserDefaults.standard.set(data, forKey: "progress:\(slug)")
-    }
-
-    func deleteBook(slug: String) {
-        let dir = BookPaths.bookDirectory(slug: slug)
-        try? FileManager.default.removeItem(at: dir)
+    func deleteDocument(id: UUID) {
+        let url = LibraryPaths.documentURL(id: id)
+        try? FileManager.default.removeItem(at: url)
     }
 }

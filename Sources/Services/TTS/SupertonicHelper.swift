@@ -1,6 +1,6 @@
 import Foundation
 import Accelerate
-import OnnxRuntimeBindings
+@preconcurrency import OnnxRuntimeBindings
 
 // MARK: - Available Languages
 
@@ -42,7 +42,7 @@ struct VoiceStyleData: Codable {
 
 // MARK: - Unicode Text Processor
 
-class UnicodeProcessor {
+class UnicodeProcessor: @unchecked Sendable {
     let indexer: [Int64]
     
     init(unicodeIndexerPath: String) throws {
@@ -537,21 +537,22 @@ func sanitizeFilename(_ text: String, maxLen: Int) -> String {
     }.map(String.init).joined()
 }
 
-func loadCfgs(_ onnxDir: String) throws -> Config {
-    let cfgPath = "\(onnxDir)/tts.json"
-    let data = try Data(contentsOf: URL(fileURLWithPath: cfgPath))
+func loadCfgs(_ onnxDir: URL) throws -> Config {
+    let cfgURL = onnxDir.appendingPathComponent("tts.json")
+    print("[TTS] Loading config from \(cfgURL.path)")
+    let data = try Data(contentsOf: cfgURL)
     let config = try JSONDecoder().decode(Config.self, from: data)
     return config
 }
 
 // MARK: - ONNX Runtime Integration
 
-struct Style {
+struct Style: @unchecked Sendable {
     let ttl: ORTValue
     let dp: ORTValue
 }
 
-class TextToSpeech {
+class TextToSpeech: @unchecked Sendable {
     let cfgs: Config
     let textProcessor: UnicodeProcessor
     let dpOrt: ORTSession
@@ -807,28 +808,41 @@ func loadVoiceStyle(_ voiceStylePaths: [String], verbose: Bool) throws -> Style 
 }
 
 func loadTextToSpeech(_ onnxDir: String, _ useGpu: Bool, _ env: ORTEnv) throws -> TextToSpeech {
+    let onnxDirURL = URL(fileURLWithPath: onnxDir)
     if useGpu {
         throw NSError(domain: "TTS", code: 1, userInfo: [NSLocalizedDescriptionKey: "GPU mode is not supported yet"])
     }
-    print("Using CPU for inference\n")
+    print("[TTS] Initializing for CPU inference...")
     
-    let cfgs = try loadCfgs(onnxDir)
+    let cfgs = try loadCfgs(onnxDirURL)
     
+    print("[TTS] Creating session options...")
     let sessionOptions = try ORTSessionOptions()
     
-    let dpPath = "\(onnxDir)/duration_predictor.onnx"
-    let textEncPath = "\(onnxDir)/text_encoder.onnx"
-    let vectorEstPath = "\(onnxDir)/vector_estimator.onnx"
-    let vocoderPath = "\(onnxDir)/vocoder.onnx"
+    let dpURL        = onnxDirURL.appendingPathComponent("duration_predictor.onnx")
+    let textEncURL   = onnxDirURL.appendingPathComponent("text_encoder.onnx")
+    let vectorEstURL = onnxDirURL.appendingPathComponent("vector_estimator.onnx")
+    let vocoderURL   = onnxDirURL.appendingPathComponent("vocoder.onnx")
     
-    let dpOrt = try ORTSession(env: env, modelPath: dpPath, sessionOptions: sessionOptions)
-    let textEncOrt = try ORTSession(env: env, modelPath: textEncPath, sessionOptions: sessionOptions)
-    let vectorEstOrt = try ORTSession(env: env, modelPath: vectorEstPath, sessionOptions: sessionOptions)
-    let vocoderOrt = try ORTSession(env: env, modelPath: vocoderPath, sessionOptions: sessionOptions)
+    func createSession(url: URL) throws -> ORTSession {
+        print("[TTS] Loading model: \(url.lastPathComponent)...")
+        if !FileManager.default.fileExists(atPath: url.path) {
+            print("[TTS] Error: File missing at \(url.path)")
+            throw NSError(domain: "TTS", code: 404, userInfo: [NSLocalizedDescriptionKey: "Model file missing: \(url.lastPathComponent)"])
+        }
+        return try ORTSession(env: env, modelPath: url.path, sessionOptions: sessionOptions)
+    }
     
-    let unicodeIndexerPath = "\(onnxDir)/unicode_indexer.json"
-    let textProcessor = try UnicodeProcessor(unicodeIndexerPath: unicodeIndexerPath)
+    let dpOrt        = try createSession(url: dpURL)
+    let textEncOrt   = try createSession(url: textEncURL)
+    let vectorEstOrt = try createSession(url: vectorEstURL)
+    let vocoderOrt   = try createSession(url: vocoderURL)
     
+    let indexerURL = onnxDirURL.appendingPathComponent("unicode_indexer.json")
+    print("[TTS] Loading text processor...")
+    let textProcessor = try UnicodeProcessor(unicodeIndexerPath: indexerURL.path)
+    
+    print("[TTS] All components loaded successfully.")
     return TextToSpeech(cfgs: cfgs, textProcessor: textProcessor,
                        dpOrt: dpOrt, textEncOrt: textEncOrt,
                        vectorEstOrt: vectorEstOrt, vocoderOrt: vocoderOrt)
