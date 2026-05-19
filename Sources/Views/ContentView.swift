@@ -9,15 +9,15 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             LibraryView()
-                .navigationTitle("J7seven")
+                .navigationTitle("Library")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
-                    ToolbarItem(placement: .principal) {
+                    ToolbarItem(placement: .navigationBarLeading) {
                         Image("AppLogo")
                             .resizable()
                             .scaledToFit()
-                            .frame(height: 28)
-                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .frame(height: 34)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
