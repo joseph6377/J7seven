@@ -1,50 +1,465 @@
 import SwiftUI
 
+enum LibraryFilter: String, CaseIterable {
+    case shelf = "My Shelf"
+    case favorites = "Favorites"
+    case history = "History"
+}
+
 struct LibraryView: View {
     @Environment(AppState.self) private var appState
+    @State private var selectedFilter: LibraryFilter = .shelf
+    @State private var searchText = ""
+    @State private var isSearchActive = false
+    @State private var showModelDownload = false
+    @State private var isGridView = true
+    @State private var favorites: Set<UUID> = Set()
 
-    var body: some View {
-        Group {
-            if appState.books.isEmpty {
-                emptyState
-            } else {
-                bookGrid
+    // Computed list of books filtered by search query
+    private var filteredBooks: [LibraryEntry] {
+        let books = appState.books
+        if searchText.isEmpty {
+            return books
+        } else {
+            return books.filter {
+                $0.title.localizedCaseInsensitiveContains(searchText) ||
+                ($0.author?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
         }
-        .onAppear { appState.refresh() }
     }
 
-    // MARK: - Grid
+    private var favoritedBooks: [LibraryEntry] {
+        filteredBooks.filter { favorites.contains($0.id) }
+    }
 
-    private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
+    private var historyBooks: [LibraryEntry] {
+        filteredBooks.sorted(by: { $0.lastOpenedAt > $1.lastOpenedAt })
+    }
 
-    private var bookGrid: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 20) {
-                ForEach(appState.books) { entry in
-                    Button {
-                        appState.openDocument(entry)
-                    } label: {
-                        BookGridCell(entry: entry)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            appState.libraryService.deleteDocument(id: entry.id)
-                            appState.refresh()
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+    var body: some View {
+        VStack(spacing: 0) {
+            if isSearchActive {
+                searchField
+            }
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    // Stats Dashboard (2026 Premium touch!)
+                    statsDashboard
+
+                    // Filter chips matching the new editorial style
+                    filterChipsSection
+
+                    // Content area
+                    Group {
+                        switch selectedFilter {
+                        case .shelf:
+                            if filteredBooks.isEmpty {
+                                if !searchText.isEmpty {
+                                    noResultsState
+                                } else {
+                                    emptyState
+                                }
+                            } else {
+                                bookContent(for: filteredBooks)
+                            }
+                        case .favorites:
+                            if favoritedBooks.isEmpty {
+                                favoritesEmptyState
+                            } else {
+                                bookContent(for: favoritedBooks)
+                            }
+                        case .history:
+                            if historyBooks.isEmpty {
+                                emptyState
+                            } else {
+                                bookContent(for: historyBooks)
+                            }
                         }
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 120)
+        }
+        .onAppear {
+            appState.refresh()
+            loadFavorites()
+        }
+        .navigationTitle("Library")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Image("AppLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 34)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                toolbarActions
+            }
+        }
+        .sheet(isPresented: $showModelDownload) {
+            ModelDownloadView(
+                synthesizer: appState.supertonicSynthesizer,
+                onReady: {
+                    appState.selectedEngine = .supertonic
+                }
+            )
+            .preferredColorScheme(appState.selectedAppearance.colorScheme)
         }
     }
 
-    // MARK: - Empty state
+    // MARK: - Subviews
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                
+                TextField("Search audiobooks...", text: $searchText)
+                    .font(.subheadline)
+                    .textFieldStyle(.plain)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color.primary.opacity(0.05), in: Capsule())
+            
+            Button("Cancel") {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                    isSearchActive = false
+                    searchText = ""
+                }
+            }
+            .font(.subheadline.bold())
+            .foregroundStyle(Color.primary)
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    private var statsDashboard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Good evening, Joseph")
+                        .font(.system(.title3, design: .serif).bold())
+                        .foregroundStyle(.primary)
+                    Text("Welcome to your sanctuary.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "timer")
+                        .font(.caption)
+                    Text("4.8h read")
+                        .font(.caption.bold())
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                .foregroundStyle(Color.accentColor)
+            }
+            
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(appState.books.count)")
+                        .font(.title2.bold())
+                    Text("Books on shelf")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 12))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("100% Offline")
+                        .font(.title2.bold())
+                    Text("On-device AI")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    private var filterChipsSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(LibraryFilter.allCases, id: \.self) { filter in
+                    Button {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                            selectedFilter = filter
+                        }
+                    } label: {
+                        Text(filter.rawValue)
+                            .font(.system(size: 13, weight: .bold, design: .serif))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(selectedFilter == filter ? Color.primary : Color.primary.opacity(0.05))
+                            .foregroundStyle(selectedFilter == filter ? Color(.systemBackground) : Color.primary)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+    }
+
+    private var toolbarActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                    isSearchActive.toggle()
+                    if !isSearchActive {
+                        searchText = ""
+                    }
+                }
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 32, height: 32)
+                    .background(isSearchActive ? Color.primary.opacity(0.12) : Color.primary.opacity(0.05), in: Circle())
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                Picker("Appearance", selection: Bindable(appState).selectedAppearance) {
+                    ForEach(AppAppearance.allCases) { appAppearance in
+                        Label(appAppearance.rawValue, systemImage: appAppearance.iconName)
+                            .tag(appAppearance)
+                    }
+                }
+            } label: {
+                Image(systemName: appState.selectedAppearance.iconName)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.primary.opacity(0.05), in: Circle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                Section("Speech Engine") {
+                    Picker("Engine", selection: Bindable(appState).selectedEngine) {
+                        ForEach(TTSEngine.allCases) { engine in
+                            Text(engine.displayName)
+                                .tag(engine)
+                        }
+                    }
+                }
+
+                if case .notDownloaded = appState.supertonicSynthesizer.modelState {
+                    Button {
+                        showModelDownload = true
+                    } label: {
+                        Label("Download Supertonic Model", systemImage: "arrow.down.circle")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.primary.opacity(0.05), in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var shelfHeader: some View {
+        HStack {
+            Text(selectedFilter.rawValue)
+                .font(.system(.subheadline, design: .serif).bold())
+                .foregroundStyle(.primary)
+            Spacer()
+            
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    isGridView.toggle()
+                }
+            } label: {
+                Image(systemName: isGridView ? "list.bullet" : "square.grid.2x2")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.primary.opacity(0.04), in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func bookContent(for books: [LibraryEntry]) -> some View {
+        VStack(spacing: 0) {
+            shelfHeader
+            
+            if isGridView {
+                gridShelf(for: books)
+            } else {
+                bookList(for: books)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func gridShelf(for books: [LibraryEntry]) -> some View {
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 16),
+            GridItem(.flexible(), spacing: 16),
+            GridItem(.flexible(), spacing: 16)
+        ], spacing: 20) {
+            ForEach(books) { entry in
+                Button {
+                    appState.openDocument(entry)
+                } label: {
+                    VStack(spacing: 8) {
+                        CoverImageView(id: entry.id)
+                            .frame(width: 90, height: 135)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 4)
+                            .rotation3DEffect(
+                                .degrees(5),
+                                axis: (x: 0.0, y: 1.0, z: 0.0),
+                                anchor: .center,
+                                perspective: 0.3
+                            )
+                        
+                        VStack(spacing: 2) {
+                            Text(entry.title)
+                                .font(.system(size: 12, weight: .bold, design: .serif))
+                                .lineLimit(1)
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(.primary)
+                            
+                            if let author = entry.author {
+                                Text(author)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    favoriteButton(id: entry.id)
+                    
+                    Button(role: .destructive) {
+                        appState.libraryService.deleteDocument(id: entry.id)
+                        appState.refresh()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 120)
+    }
+
+    @ViewBuilder
+    private func bookList(for books: [LibraryEntry]) -> some View {
+        LazyVStack(spacing: 16) {
+            ForEach(books) { entry in
+                Button {
+                    appState.openDocument(entry)
+                } label: {
+                    BookRowCell(entry: entry)
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    favoriteButton(id: entry.id)
+                    
+                    Button(role: .destructive) {
+                        appState.libraryService.deleteDocument(id: entry.id)
+                        appState.refresh()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 120)
+    }
+
+    @ViewBuilder
+    private func favoriteButton(id: UUID) -> some View {
+        Button {
+            toggleFavorite(id)
+        } label: {
+            if favorites.contains(id) {
+                Label("Remove Favorite", systemImage: "star.slash")
+            } else {
+                Label("Add to Favorites", systemImage: "star.fill")
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func loadFavorites() {
+        let saved = UserDefaults.standard.string(forKey: "library.favorites") ?? ""
+        favorites = Set(saved.split(separator: ",").compactMap { UUID(uuidString: String($0)) })
+    }
+
+    private func toggleFavorite(_ id: UUID) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        if favorites.contains(id) {
+            favorites.remove(id)
+        } else {
+            favorites.insert(id)
+        }
+        let savedString = favorites.map { $0.uuidString }.joined(separator: ",")
+        UserDefaults.standard.set(savedString, forKey: "library.favorites")
+    }
+
+    // MARK: - Empty States
 
     private var emptyState: some View {
         VStack(spacing: 0) {
@@ -64,7 +479,7 @@ struct LibraryView: View {
             .padding(.bottom, 28)
 
             Text("Your Library is Empty")
-                .font(.title2.bold())
+                .font(.system(.title3, design: .serif).bold())
                 .padding(.bottom, 8)
 
             Text("Import an EPUB to start reading aloud.")
@@ -76,49 +491,121 @@ struct LibraryView: View {
             Spacer()
             Spacer()
         }
+        .frame(minHeight: 450)
+    }
+
+    private var noResultsState: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 56, weight: .light))
+                .foregroundStyle(.secondary.opacity(0.7))
+                .padding(.bottom, 20)
+
+            Text("No Results Found")
+                .font(.system(.title3, design: .serif).bold())
+                .padding(.bottom, 8)
+
+            Text("We couldn't find any audiobooks matching \"\(searchText)\".")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+                .lineSpacing(3)
+
+            Spacer()
+            Spacer()
+        }
+        .frame(minHeight: 450)
+    }
+
+    private var favoritesEmptyState: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.08))
+                    .frame(width: 140, height: 140)
+                Circle()
+                    .fill(Color.accentColor.opacity(0.05))
+                    .frame(width: 190, height: 190)
+                Image(systemName: "star")
+                    .font(.system(size: 56, weight: .light))
+                    .foregroundStyle(Color.accentColor.opacity(0.7))
+            }
+            .padding(.bottom, 28)
+
+            Text("No Favorites Yet")
+                .font(.system(.title3, design: .serif).bold())
+                .padding(.bottom, 8)
+
+            Text("Star your favorite books in the menu to access them quickly.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+                .lineSpacing(3)
+
+            Spacer()
+            Spacer()
+        }
+        .frame(minHeight: 450)
     }
 }
 
-// MARK: - Book grid cell
+// MARK: - Book Row Cell
 
-private struct BookGridCell: View {
+private struct BookRowCell: View {
     @Environment(AppState.self) private var appState
     let entry: LibraryEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .bottomLeading) {
-                // We'll need a way to load the cover data from the SavedDocument
-                // For the grid cell, maybe we should have a CoverImage component that takes an ID
-                CoverImageView(id: entry.id)
-                    .aspectRatio(2/3, contentMode: .fill)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
-            }
+        HStack(spacing: 16) {
+            CoverImageView(id: entry.id)
+                .frame(width: 72, height: 108)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 3)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.title)
-                    .font(.footnote.bold())
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 4) {
                 if let author = entry.author {
                     Text(author)
-                        .font(.caption)
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text(entry.lastOpenedAt.formattedRelative())
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-}
 
-extension Date {
-    func formattedRelative() -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return "Opened " + formatter.localizedString(for: self, relativeTo: Date())
+                Text(entry.title)
+                    .font(.system(size: 15, weight: .bold, design: .serif))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .padding(.bottom, 2)
+
+                let progressPercent = Int(round(entry.progress * 100))
+                
+                HStack(spacing: 6) {
+                    // Small custom micro-circular progress indicator
+                    ZStack {
+                        Circle()
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 2)
+                            .frame(width: 12, height: 12)
+                        Circle()
+                            .trim(from: 0, to: entry.progress)
+                            .stroke(Color.accentColor, lineWidth: 2)
+                            .frame(width: 12, height: 12)
+                            .rotationEffect(.degrees(-90))
+                    }
+                    
+                    Text("\(progressPercent)% • \(entry.estimatedTimeLeft)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }

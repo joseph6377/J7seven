@@ -19,44 +19,48 @@ enum ZipError: LocalizedError {
 }
 
 enum ZipExtractor {
-    private static let localFileSig: UInt32 = 0x04034b50
-    private static let dataDescriptorSig: UInt32 = 0x08074b50
-
-    /// Extract a ZIP archive to `destURL`. Handles STORED (0) and DEFLATE (8) compression.
+    /// Extract a ZIP archive to `destURL`. Parses the Central Directory to support
+    /// streamed archives and files utilizing general purpose bit flag 3 (data descriptors).
     static func extract(_ zipURL: URL, to destURL: URL) throws {
         let data = try Data(contentsOf: zipURL)
         let fm = FileManager.default
         try fm.createDirectory(at: destURL, withIntermediateDirectories: true)
 
-        var pos = 0
-        while pos + 30 <= data.count {
-            let sig = data.u32(pos)
-            if sig != localFileSig {
-                // Skip data descriptors or other blocks if they appear
-                if sig == dataDescriptorSig { pos += 16 ; continue }
-                // If we hit central directory signature (0x02014b50), we are done
-                if sig == 0x02014b50 { break }
-                pos += 1
-                continue
-            }
+        guard let eocdOffset = findEOCD(in: data) else {
+            throw ZipError.invalidFormat
+        }
+        
+        let totalRecords = Int(data.u16(eocdOffset + 10))
+        let cdOffset = Int(data.u32(eocdOffset + 16))
 
-            _                  = data.u16(pos + 4)
-            let flags          = data.u16(pos + 6)
-            let compression    = data.u16(pos + 8)
-            let compressedSize = Int(data.u32(pos + 18))
-            let uncompressed   = Int(data.u32(pos + 22))
-            let nameLen        = Int(data.u16(pos + 26))
-            let extraLen       = Int(data.u16(pos + 28))
+        guard cdOffset < data.count else {
+            throw ZipError.invalidFormat
+        }
 
-            let nameStart = pos + 30
-            let dataStart = nameStart + nameLen + extraLen
-            let dataEnd   = dataStart + compressedSize
-
-            guard nameStart + nameLen <= data.count, dataEnd <= data.count else {
+        var pos = cdOffset
+        for _ in 0..<totalRecords {
+            guard pos + 46 <= data.count else {
                 throw ZipError.invalidFormat
             }
-
-            let nameData = data[nameStart ..< nameStart + nameLen]
+            
+            let sig = data.u32(pos)
+            guard sig == 0x02014b50 else {
+                throw ZipError.invalidFormat
+            }
+            
+            let compression    = data.u16(pos + 10)
+            let compressedSize = Int(data.u32(pos + 20))
+            let uncompressed   = Int(data.u32(pos + 24))
+            let nameLen        = Int(data.u16(pos + 28))
+            let extraLen       = Int(data.u16(pos + 30))
+            let commentLen     = Int(data.u16(pos + 32))
+            let localOffset    = Int(data.u32(pos + 42))
+            
+            guard pos + 46 + nameLen + extraLen + commentLen <= data.count else {
+                throw ZipError.invalidFormat
+            }
+            
+            let nameData = data[pos + 46 ..< pos + 46 + nameLen]
             if let name = String(data: nameData, encoding: .utf8), !name.isEmpty {
                 let dest = destURL.appendingPathComponent(name)
                 
@@ -64,6 +68,24 @@ enum ZipExtractor {
                     try? fm.createDirectory(at: dest, withIntermediateDirectories: true)
                 } else {
                     try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    
+                    guard localOffset + 30 <= data.count else {
+                        throw ZipError.invalidFormat
+                    }
+                    let localSig = data.u32(localOffset)
+                    guard localSig == 0x04034b50 else {
+                        throw ZipError.invalidFormat
+                    }
+                    
+                    let localNameLen  = Int(data.u16(localOffset + 26))
+                    let localExtraLen = Int(data.u16(localOffset + 28))
+                    
+                    let dataStart = localOffset + 30 + localNameLen + localExtraLen
+                    let dataEnd   = dataStart + compressedSize
+                    
+                    guard dataEnd <= data.count else {
+                        throw ZipError.invalidFormat
+                    }
                     
                     let rawData = data[dataStart ..< dataEnd]
                     if compression == 0 { // Stored
@@ -76,17 +98,26 @@ enum ZipExtractor {
                     }
                 }
             }
-
-            pos = dataEnd
-            // Check for data descriptor flag
-            if (flags & 0x08) != 0 {
-                pos += 16
-            }
+            
+            pos += 46 + nameLen + extraLen + commentLen
         }
+    }
+
+    private static func findEOCD(in data: Data) -> Int? {
+        let minPos = max(0, data.count - 65535 - 22)
+        var pos = data.count - 22
+        while pos >= minPos {
+            if data.u32(pos) == 0x06054b50 {
+                return pos
+            }
+            pos -= 1
+        }
+        return nil
     }
 
     private static func decompress(_ data: Data, uncompressedSize: Int) throws -> Data {
         let bufferSize = uncompressedSize
+        if bufferSize == 0 { return Data() }
         let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
         defer { destinationBuffer.deallocate() }
 

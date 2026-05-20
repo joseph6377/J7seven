@@ -107,18 +107,23 @@ Sources/
     LibraryPaths.swift          Documents/library/ path helpers
     LibraryService.swift        CRUD for SavedDocument JSON files
     PlayerService.swift         AVAudioEngine pipeline + NowPlaying + remote commands
-    ZipExtractor.swift          Used by EPUB parser to unzip .epub files
+    ZipExtractor.swift          Central Directory ZIP extractor (robust support for streaming & data descriptors)
     Keychain.swift / ServerConfig.swift
     TTS/
+      AppleVoiceScheduler.swift Speech synthesis scheduler for Apple's built-in AVSpeechSynthesizer
       EpubTextParser.swift      EPUB → [ChapterText] (XHTML spine → plain text)
       SupertonicHelper.swift    ONNX Runtime wrappers (TextToSpeech, UnicodeProcessor, etc.)
       SupertonicSynthesizer.swift  Synthesizer protocol; model download + ONNX inference
       SynthScheduler.swift      Look-ahead buffer scheduling, cursor advancement
+      TTSEngine.swift           Enum representing the selected speech engine
       TTSVoice.swift            10 voice definitions (M1–M5, F1–F5)
       XMLIndexer.swift          Lightweight XML parser for EPUB metadata
   Views/
-    ContentView.swift
-    Library/LibraryView.swift
+    ContentView.swift           Root container view with bottom tab bar navigation and import alerts
+    Library/
+      ImportView.swift          UI for choosing synthesis quality settings & initiating EPUB imports
+      LibraryView.swift         The shelf grid/list view with stats and appearance/engine pickers
+      VoicesView.swift          Voice tester and selection settings panel
     Player/AudioPlayerView.swift
     Player/MiniPlayerView.swift
     Components/CoverImageView.swift

@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+.claude/
+*~
+*.swp
+
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/project.xcworkspace
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+*.xcuserstate
+xcuserdata/
+
+# Backup files
+*_backup.png
+ChatGPT Image *.png
+*.orig
+*.rej

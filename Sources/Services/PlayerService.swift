@@ -9,9 +9,13 @@ final class PlayerService {
     private let speedControl = AVAudioUnitTimePitch()
     
     var isPlaying: Bool = false
+    private(set) var hasAudioData = false
     var playbackRate: Float = 1.0
 
     private let nowPlayingQueue = DispatchQueue(label: "in.josepht.BooksApp.NowPlaying")
+
+    var onRemotePlay:  (@MainActor () -> Void)?
+    var onRemotePause: (@MainActor () -> Void)?
 
     init() {
         setupEngine()
@@ -29,10 +33,10 @@ final class PlayerService {
         engine.connect(speedControl, to: engine.mainMixerNode, format: format)
         
         engine.prepare()
-        try? engine.start()
     }
 
     func schedule(_ buffer: AVAudioPCMBuffer, id: String, completion: @escaping @Sendable (String) -> Void) {
+        hasAudioData = true
         playerNode.scheduleBuffer(buffer, at: nil, options: [], completionHandler: {
             Task { @MainActor in
                 completion(id)
@@ -56,6 +60,7 @@ final class PlayerService {
     func stop() {
         playerNode.stop()
         isPlaying = false
+        hasAudioData = false
         updateNowPlaying()
     }
 
@@ -108,11 +113,15 @@ final class PlayerService {
     private func setupRemoteCommands() {
         let c = MPRemoteCommandCenter.shared()
         c.playCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.play() }
+            Task { @MainActor in
+                if let handler = self?.onRemotePlay { handler() } else { self?.play() }
+            }
             return .success
         }
         c.pauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.pause() }
+            Task { @MainActor in
+                if let handler = self?.onRemotePause { handler() } else { self?.pause() }
+            }
             return .success
         }
     }

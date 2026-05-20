@@ -4,6 +4,7 @@ struct ModelDownloadView: View {
     @Environment(\.dismiss) private var dismiss
     let synthesizer: SupertonicSynthesizer
     var onReady: () -> Void = {}
+    var onQuickStart: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 28) {
@@ -21,6 +22,15 @@ struct ModelDownloadView: View {
             }
 
             progressSection
+
+            if let onQuickStart {
+                Button("Quick Start with Apple Voice") {
+                    onQuickStart()
+                    dismiss()
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
 
             Button("Cancel") { dismiss() }
                 .foregroundStyle(.secondary)

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // Persisted (text + cursor only — no audio)
 struct SavedDocument: Codable, Identifiable {
@@ -31,6 +32,8 @@ struct LibraryEntry: Codable, Identifiable, Hashable {
     let title: String
     let author: String?
     let lastOpenedAt: Date
+    let progress: Double
+    let estimatedTimeLeft: String
 }
 
 extension LibraryEntry {
@@ -39,6 +42,48 @@ extension LibraryEntry {
         title = doc.title
         author = doc.author
         lastOpenedAt = doc.lastOpenedAt
+
+        // Calculate progress based on paragraphs
+        let totalParagraphs = doc.chapters.reduce(0) { $0 + $1.paragraphs.count }
+        if totalParagraphs > 0 {
+            let before = doc.chapters
+                .prefix(doc.cursor.chapterIndex)
+                .reduce(0) { $0 + $1.paragraphs.count }
+            progress = Double(before + doc.cursor.paragraphIndex) / Double(totalParagraphs)
+        } else {
+            progress = 0.0
+        }
+
+        // Calculate remaining words for duration estimation
+        var remainingWords = 0
+        for (cIdx, chapter) in doc.chapters.enumerated() {
+            if cIdx < doc.cursor.chapterIndex {
+                continue
+            } else if cIdx == doc.cursor.chapterIndex {
+                let remainingParagraphs = chapter.paragraphs.suffix(from: min(doc.cursor.paragraphIndex, chapter.paragraphs.count))
+                for paragraph in remainingParagraphs {
+                    remainingWords += paragraph.split(separator: " ").count
+                }
+            } else {
+                for paragraph in chapter.paragraphs {
+                    remainingWords += paragraph.split(separator: " ").count
+                }
+            }
+        }
+
+        // 150 WPM average audiobook speaking speed
+        let wordsPerMinute = 150.0
+        let totalMinutes = Double(remainingWords) / wordsPerMinute
+        let hours = Int(totalMinutes / 60.0)
+        let mins = Int(totalMinutes.truncatingRemainder(dividingBy: 60.0))
+
+        if hours > 0 {
+            estimatedTimeLeft = "\(hours) hrs left"
+        } else if mins > 0 {
+            estimatedTimeLeft = "\(mins) mins left"
+        } else {
+            estimatedTimeLeft = "Finished"
+        }
     }
 }
 
@@ -58,5 +103,30 @@ extension Double {
         if h > 0 { return "\(h)h \(m)m" }
         if m > 0 { return "\(m)m" }
         return "\(s)s"
+    }
+}
+
+// App Theme selection matching system preferences
+enum AppAppearance: String, CaseIterable, Identifiable, Codable {
+    case system = "System"
+    case light = "Light"
+    case dark = "Dark"
+    
+    var id: String { rawValue }
+    
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .system: return "circle.lefthalf.striped.horizontal"
+        case .light: return "sun.max"
+        case .dark: return "moon"
+        }
     }
 }
