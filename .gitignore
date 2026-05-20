@@ -18,5 +18,7 @@ xcuserdata/
 # Backup files
 *_backup.png
 ChatGPT Image *.png
+Simulator Screenshot *.png
 *.orig
 *.rej
+

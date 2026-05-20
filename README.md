@@ -165,3 +165,9 @@ English, Korean, Japanese, Arabic, Bulgarian, Czech, Danish, German, Greek, Span
 - Cloud TTS tier (the `Synthesizer` protocol is designed to accommodate a `CartesiaSynthesizer` or similar swap-in)
 - Position sync across devices
 - Export to audio file (intentionally not a feature — the app is ephemeral by design)
+
+## Credits & Acknowledgements
+
+This application is built on top of the incredible open-source work by **Supertone, Inc.** 
+Special thanks to their team for developing and open-sourcing [Supertonic 3](https://github.com/supertone-inc/supertonic) and publishing the model style assets on [Hugging Face](https://huggingface.co/Supertone/supertonic-3), enabling premium, fully offline, and high-performance text-to-speech synthesis directly on-device.
+
