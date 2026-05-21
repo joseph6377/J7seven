@@ -115,6 +115,35 @@ enum EpubTextParser {
             }
         }
 
+        // NCX fallback for EPUB 2.0 and other books missing an HTML nav document
+        if tocTitles.isEmpty, let ncxItem = itemsById.values.first(where: {
+            $0.type == "application/x-dtbncx+xml" || $0.href.hasSuffix(".ncx")
+        }) {
+            let ncxURL    = opfDir.appendingPathComponent(ncxItem.href)
+            let ncxRelDir = (normalize(base: opfRelDir, path: ncxItem.href) as NSString).deletingLastPathComponent
+            if let ncxData = try? Data(contentsOf: ncxURL) {
+                let ncxRoot = XMLIndexer(data: ncxData)
+                let navPoints = ncxRoot.allDescendants.filter {
+                    let local = $0.name.components(separatedBy: ":").last ?? $0.name
+                    return local == "navPoint"
+                }
+                for navPoint in navPoints {
+                    guard let contentNode = navPoint.child("content"),
+                          let rawSrc = contentNode.attributes["src"], !rawSrc.isEmpty else { continue }
+                    
+                    let cleanSrc = rawSrc.components(separatedBy: "#").first ?? rawSrc
+                    let key      = normalize(base: ncxRelDir, path: cleanSrc)
+                    
+                    if let textNode = navPoint.child("navLabel")?.child("text") {
+                        let label = textNode.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !label.isEmpty {
+                            tocTitles[key] = label
+                        }
+                    }
+                }
+            }
+        }
+
         // 7. Spine → chapters of plain text
         var chapters: [EpubChapter] = []
         if let spine = opf.child("spine") {

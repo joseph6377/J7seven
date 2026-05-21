@@ -8,8 +8,10 @@ struct AudioPlayerView: View {
 
     @State private var showSettings = false
     @State private var showChapters = false
+    @State private var showMoreOptions = false
     @State private var isDeckExpanded = false
     @State private var dragOffset: CGFloat = 0
+    @State private var isParagraphScrolledAway = false
 
     // Inactivity Auto-Hide controls state
     @State private var areControlsVisible = true
@@ -78,6 +80,10 @@ struct AudioPlayerView: View {
                         cancelAutoHideTimer()
                     }
                 }
+                .onLongPressGesture {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showSettings = true
+                }
                 .onAppear {
                     scrollProxy.scrollTo(session.currentParagraphIndex, anchor: .center)
                     if session.state == .playing {
@@ -110,9 +116,57 @@ struct AudioPlayerView: View {
                 header(scrollProxy: scrollProxy, safeAreaTop: geometry.safeAreaInsets.top)
                     .offset(y: areControlsVisible ? 0 : -150)
                     .opacity(areControlsVisible ? 1.0 : 0.0)
+
+                // Immersive floating "Sync Highlight" pill for one-tap snapping in full screen
+                if !areControlsVisible && isParagraphScrolledAway {
+                    VStack {
+                        Spacer()
+                        
+                        HStack(spacing: 6) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 10, weight: .bold))
+                            Text("Sync Highlight")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.accentColor.opacity(0.35), lineWidth: 0.5)
+                        )
+                        .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 4)
+                        .contentShape(Capsule())
+                        .onTapGesture {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                scrollProxy.scrollTo(session.currentParagraphIndex, anchor: .center)
+                            }
+                        }
+                    }
+                    .padding(.bottom, geometry.safeAreaInsets.bottom + 20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.9).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(edges: .top)
+            .onPreferenceChange(ActiveParagraphFramePreferenceKey.self) { rect in
+                guard rect != .zero else { return }
+                let screenHeight = geometry.size.height
+                let safeAreaTop = geometry.safeAreaInsets.top
+                let safeAreaBottom = geometry.safeAreaInsets.bottom
+                
+                let isOffScreen = rect.maxY < (safeAreaTop + 60) || rect.minY > (screenHeight - safeAreaBottom - 60)
+                
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    self.isParagraphScrolledAway = isOffScreen
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if areControlsVisible {
                     slidingPlayerDeck
@@ -125,6 +179,11 @@ struct AudioPlayerView: View {
             }
             .sheet(isPresented: $showChapters) {
                 AudioChapterPickerView(session: session)
+                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            }
+            .sheet(isPresented: $showMoreOptions) {
+                MoreOptionsSheet(session: session)
+                    .environment(appState)
                     .preferredColorScheme(appState.selectedAppearance.colorScheme)
             }
             .statusBarHidden(!areControlsVisible)
@@ -146,6 +205,12 @@ struct AudioPlayerView: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color(hex: "EFECE6"))
                 )
+                .background(
+                    GeometryReader { geo in
+                        Color.clear
+                            .preference(key: ActiveParagraphFramePreferenceKey.self, value: geo.frame(in: .global))
+                    }
+                )
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if areControlsVisible {
@@ -156,6 +221,10 @@ struct AudioPlayerView: View {
                         }
                         resetAutoHideTimer()
                     }
+                }
+                .onLongPressGesture {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showSettings = true
                 }
         } else {
             Text(para)
@@ -174,6 +243,10 @@ struct AudioPlayerView: View {
                         }
                         resetAutoHideTimer()
                     }
+                }
+                .onLongPressGesture {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showSettings = true
                 }
         }
     }
@@ -210,12 +283,11 @@ struct AudioPlayerView: View {
             }
         }
         
-        // 3. Style the active word with the sharp yellow focus box
+        // 3. Style the active word with the soft amber focus box
         if let range = Range(nsRange, in: para) {
             if let start = AttributedString.Index(range.lowerBound, within: attributed),
                let end = AttributedString.Index(range.upperBound, within: attributed) {
-                attributed[start..<end].backgroundColor = Color(hex: "FFCC00") // Yellow word-level highlight box
-                attributed[start..<end].foregroundColor = .black
+                attributed[start..<end].backgroundColor = Color(hex: "FFCC00").opacity(0.35) // Soft amber word-level highlight box
             }
         }
         
@@ -237,59 +309,26 @@ struct AudioPlayerView: View {
 
             Spacer()
             
-            VStack(spacing: 2) {
-                Text(session.document.title)
-                    .font(.system(size: 13, weight: .bold, design: .serif))
-                    .lineLimit(1)
-                Text(session.document.author ?? "Unknown Author")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: 160)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.04), in: Capsule())
-
-            Spacer()
-
-            HStack(spacing: 10) {
-                Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        scrollProxy.scrollTo(session.currentParagraphIndex, anchor: .center)
-                    }
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                } label: {
-                    Image(systemName: "location.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 44, height: 44)
-                        .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.04))
-                        .clipShape(Circle())
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    scrollProxy.scrollTo(session.currentParagraphIndex, anchor: .center)
                 }
-                
-                Button {
-                    showSettings = true
-                } label: {
-                    Text("Aa")
-                        .font(.system(size: 16, weight: .bold, design: .serif))
+            } label: {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(session.document.title)
+                        .font(.system(size: 13, weight: .bold, design: .serif))
+                        .lineLimit(1)
                         .foregroundStyle(Color.primary)
-                        .frame(width: 44, height: 44)
-                        .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.04))
-                        .clipShape(Circle())
-                }
-
-                Button {
-                    showChapters = true
-                } label: {
-                    Image(systemName: "book.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.primary)
-                        .frame(width: 44, height: 44)
-                        .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.04))
-                        .clipShape(Circle())
+                    
+                    let chapter = session.document.chapters[session.currentChapterIndex]
+                    Text("Chapter \(session.currentChapterIndex + 1): \(chapter.title)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.top, safeAreaTop + 8) // Dynamic padding to perfectly clear notch on all devices!
@@ -309,6 +348,14 @@ struct AudioPlayerView: View {
         )
     }
 
+    private var playerDeckBackgroundColor: Color {
+        if colorScheme == .dark {
+            return Color(hex: "151517") // Deep obsidian/gray card background for premium contrast
+        } else {
+            return Color(hex: "FFFFFF") // Pure solid white card background to cover text completely
+        }
+    }
+
     private var slidingPlayerDeck: some View {
         VStack(spacing: 0) {
             // Drag indicator / header bar
@@ -323,41 +370,35 @@ struct AudioPlayerView: View {
                             dragOffset = value.translation.height
                         }
                         .onEnded { value in
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                if value.translation.height < -50 {
-                                    isDeckExpanded = true
-                                } else if value.translation.height > 50 {
-                                    isDeckExpanded = false
-                                }
-                                dragOffset = 0
+                            if value.translation.height < -50 {
+                                isDeckExpanded = true
+                            } else if value.translation.height > 50 {
+                                isDeckExpanded = false
                             }
+                            dragOffset = 0
                         }
                 )
                 .onTapGesture {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        isDeckExpanded.toggle()
-                    }
+                    isDeckExpanded.toggle()
                 }
 
             if isDeckExpanded {
                 expandedDeckContent
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 collapsedDeckContent
-                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .background(.ultraThinMaterial)
-        .overlay(
-            Rectangle()
-                .fill(Color.primary.opacity(0.06))
-                .frame(height: 0.5),
-            alignment: .top
+        .background(
+            UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20, style: .continuous)
+                .fill(playerDeckBackgroundColor)
+                .ignoresSafeArea(edges: .bottom)
         )
-        .clipShape(RoundedRectangle(cornerRadius: isDeckExpanded ? 24 : 16, style: .continuous))
+        .overlay(
+            UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+                .ignoresSafeArea(edges: .bottom)
+        )
         .shadow(color: .black.opacity(0.08), radius: 15, x: 0, y: -5)
-        .padding(.horizontal, isDeckExpanded ? 0 : 12)
-        .padding(.bottom, isDeckExpanded ? 0 : 10)
         .offset(y: dragOffset)
     }
 
@@ -490,16 +531,6 @@ struct AudioPlayerView: View {
 
     private var expandedDeckContent: some View {
         VStack(spacing: 20) {
-            // Procedural Kinetic Waveform Visualizer
-            KineticWaveformVisualizer(
-                isPlaying: session.state == .playing,
-                gender: session.voice.gender,
-                rate: session.playbackRate
-            )
-            .frame(height: 50)
-            .padding(.horizontal, 24)
-            .padding(.top, 8)
-            
             // Dynamic Audio Progress Bar & Timing (Screen 1 style)
             let stats = bookTimingStats
             let progress = overallProgress
@@ -541,24 +572,6 @@ struct AudioPlayerView: View {
                 .padding(.horizontal, 24)
             }
             .padding(.vertical, 8)
-
-            // Chapter Info Pill
-            Button {
-                showChapters = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "list.bullet")
-                        .font(.caption.bold())
-                    Text("Chapter \(session.currentChapterIndex + 1) of \(session.document.chapters.count)")
-                        .font(.caption.bold())
-                    Image(systemName: "chevron.up")
-                        .font(.caption2.bold())
-                }
-                .foregroundStyle(Color.accentColor)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.accentColor.opacity(0.08), in: Capsule())
-            }
 
             // Central Transport controls row (Screen 1 style)
             HStack(spacing: 36) {
@@ -630,59 +643,37 @@ struct AudioPlayerView: View {
             }
             .foregroundStyle(Color.primary)
             
-            // Bottom Options Row: Sleep, List, Speed Option
-            HStack {
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "moon.fill")
-                            .font(.system(size: 14))
-                        Text("Sleep")
-                            .font(.system(size: 13, weight: .bold, design: .serif))
-                    }
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                }
-                
-                Spacer()
-                
+            // Subtractive bottom controls row: Chapter Picker and ... More Options Button
+            HStack(spacing: 12) {
                 Button {
                     showChapters = true
                 } label: {
-                    Image(systemName: "list.bullet")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 6) {
+                        Image(systemName: "list.bullet")
+                            .font(.caption.bold())
+                        Text("Chapter \(session.currentChapterIndex + 1) of \(session.document.chapters.count)")
+                            .font(.caption.bold())
+                        Image(systemName: "chevron.up")
+                            .font(.caption2.bold())
+                    }
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.accentColor.opacity(0.08), in: Capsule())
                 }
                 
-                Spacer()
-                
-                Menu {
-                    ForEach([0.8, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { rate in
-                        Button {
-                            session.setRate(Float(rate))
-                        } label: {
-                            HStack {
-                                Text(String(format: "%.2g× Speed", rate))
-                                if abs(session.playbackRate - Float(rate)) < 0.05 {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
+                Button {
+                    showMoreOptions = true
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(String(format: "%.2g×", session.playbackRate))
-                            .font(.system(size: 13, weight: .bold, design: .serif))
-                    }
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.primary.opacity(0.05), in: Circle())
                 }
             }
             .padding(.top, 10)
             .padding(.bottom, 24)
-            .padding(.horizontal, 16)
         }
     }
 
@@ -704,66 +695,6 @@ struct AudioPlayerView: View {
     }
 }
 
-// Procedural 2026 Kinetic Audio Waveform Drawing View
-struct KineticWaveformVisualizer: View {
-    let isPlaying: Bool
-    let gender: TTSVoice.Gender
-    let rate: Float
-
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            Canvas { context, size in
-                let width = size.width
-                let height = size.height
-                let midY = height / 2
-
-                // Setup parameters based on whether the voice is Male or Female, rate, and playback state
-                let speedFactor = isPlaying ? CGFloat(rate) * 2.8 : 0.4
-                let amplitudeFactor = isPlaying ? (gender == .male ? 20.0 : 14.0) : 3.0
-                let frequencyFactor = gender == .male ? 0.015 : 0.028
-
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                let currentPhase = t * speedFactor
-
-                // Wave 1: Golden accent background wave
-                var path1 = Path()
-                path1.move(to: CGPoint(x: 0, y: midY))
-                for x in stride(from: 0, to: width, by: 2) {
-                    let y = midY + sin(x * frequencyFactor + currentPhase) * amplitudeFactor
-                    path1.addLine(to: CGPoint(x: x, y: y))
-                }
-                context.stroke(path1, with: .linearGradient(
-                    Gradient(colors: [Color.accentColor.opacity(0.7), Color.orange.opacity(0.5)]),
-                    startPoint: CGPoint(x: 0, y: 0),
-                    endPoint: CGPoint(x: width, y: 0)
-                ), lineWidth: 3.0)
-
-                // Wave 2: Indigo accent main wave
-                var path2 = Path()
-                path2.move(to: CGPoint(x: 0, y: midY))
-                for x in stride(from: 0, to: width, by: 2) {
-                    let y = midY + cos(x * (frequencyFactor * 0.85) - currentPhase * 1.3) * (amplitudeFactor * 0.75)
-                    path2.addLine(to: CGPoint(x: x, y: y))
-                }
-                context.stroke(path2, with: .linearGradient(
-                    Gradient(colors: [Color.accentColor, Color.purple.opacity(0.6)]),
-                    startPoint: CGPoint(x: 0, y: 0),
-                    endPoint: CGPoint(x: width, y: 0)
-                ), lineWidth: 1.8)
-
-                // Wave 3: White micro-highlight wave
-                var path3 = Path()
-                path3.move(to: CGPoint(x: 0, y: midY))
-                for x in stride(from: 0, to: width, by: 2) {
-                    let y = midY + sin(x * (frequencyFactor * 1.45) + currentPhase * 0.85) * (amplitudeFactor * 0.35)
-                    path3.addLine(to: CGPoint(x: x, y: y))
-                }
-                context.stroke(path3, with: .color(.primary.opacity(0.3)), lineWidth: 0.8)
-            }
-        }
-    }
-}
-
 // Keep original SettingsSheet & AudioChapterPickerView structures but let's make sure SettingsSheet row is clean!
 struct SettingsSheet: View {
     @ObservedObject var session: ReaderSession
@@ -771,6 +702,7 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showUpgrade = false
+    @State private var showVoices = false
 
     private var supertonicReady: Bool {
         if case .ready = appState.supertonicSynthesizer.modelState { return true }
@@ -791,6 +723,21 @@ struct SettingsSheet: View {
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(appleVoices) { voice in voiceRow(voice) }
+                        }
+                    }
+                }
+
+                Section {
+                    Button {
+                        showVoices = true
+                    } label: {
+                        HStack {
+                            Label("Manage Voices...", systemImage: "waveform.badge.mic")
+                                .foregroundStyle(Color.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -860,6 +807,11 @@ struct SettingsSheet: View {
                 }
                 .preferredColorScheme(appState.selectedAppearance.colorScheme)
             }
+            .sheet(isPresented: $showVoices) {
+                VoicesView()
+                    .environment(appState)
+                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            }
         }
     }
 
@@ -921,5 +873,178 @@ struct AudioChapterPickerView: View {
                 }
             }
         }
+    }
+}
+
+struct MoreOptionsSheet: View {
+    @ObservedObject var session: ReaderSession
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var showVoices = false
+    @State private var showSettings = false
+    @State private var showSleepTimerPicker = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button {
+                        showVoices = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            FluidAvatarView(voice: session.voice)
+                                .frame(width: 40, height: 40)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Narrator Voice")
+                                    .font(.system(.body, design: .serif).bold())
+                                Text(session.voice.name)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .foregroundStyle(Color.primary)
+                } header: {
+                    Text("Narrator")
+                }
+                
+                Section {
+                    Picker("Playback Speed", selection: Binding(
+                        get: { session.playbackRate },
+                        set: { session.setRate($0) }
+                    )) {
+                        Text("0.8×").tag(Float(0.8))
+                        Text("1.0×").tag(Float(1.0))
+                        Text("1.25×").tag(Float(1.25))
+                        Text("1.5×").tag(Float(1.5))
+                        Text("1.75×").tag(Float(1.75))
+                        Text("2.0×").tag(Float(2.0))
+                    }
+                    .pickerStyle(.menu)
+                    
+                    Button {
+                        showSleepTimerPicker = true
+                    } label: {
+                        HStack {
+                            Text("Sleep Timer")
+                                .font(.system(.body, design: .serif).bold())
+                            Spacer()
+                            
+                            if session.sleepTimerOption != .off {
+                                if let remaining = session.sleepTimerSecondsRemaining {
+                                    Text(formatRemaining(remaining))
+                                        .font(.caption.bold())
+                                        .foregroundStyle(Color.accentColor)
+                                } else {
+                                    Text(session.sleepTimerOption.rawValue)
+                                        .font(.caption.bold())
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            } else {
+                                Text("Off")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .foregroundStyle(Color.primary)
+                } header: {
+                    Text("Controls")
+                }
+                
+                Section {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Label("Visual Settings & Quality", systemImage: "slider.horizontal.3")
+                            .font(.system(.body, design: .serif).bold())
+                            .foregroundStyle(Color.primary)
+                    }
+                }
+            }
+            .navigationTitle("More Options")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showVoices) {
+                VoicesView()
+                    .environment(appState)
+                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsSheet(session: session)
+                    .environment(appState)
+                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            }
+            .sheet(isPresented: $showSleepTimerPicker) {
+                SleepTimerView(session: session)
+                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            }
+        }
+    }
+    
+    private func formatRemaining(_ remaining: TimeInterval) -> String {
+        let m = Int(remaining) / 60
+        let s = Int(remaining) % 60
+        return String(format: "%02d:%02d", m, s)
+    }
+}
+
+struct SleepTimerView: View {
+    @ObservedObject var session: ReaderSession
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(SleepTimerOption.allCases) { option in
+                    Button {
+                        session.setSleepTimer(option)
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text(option.rawValue)
+                                .font(.system(.body, design: .serif))
+                                .foregroundStyle(session.sleepTimerOption == option ? Color.accentColor : .primary)
+                            
+                            Spacer()
+                            
+                            if session.sleepTimerOption == option {
+                                Image(systemName: "checkmark")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Sleep Timer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+struct ActiveParagraphFramePreferenceKey: PreferenceKey {
+    static let defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
     }
 }

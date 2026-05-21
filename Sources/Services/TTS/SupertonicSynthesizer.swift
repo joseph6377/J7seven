@@ -35,8 +35,40 @@ final class SupertonicSynthesizer: Synthesizer {
 
     private var modelDirectory: URL {
         FileManager.default
-            .urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Models/supertonic", isDirectory: true)
+    }
+
+    /// Resolves the actual directory path or file URL where a model asset is located,
+    /// searching first in the main app bundle (flat or nested) and falling back to caches.
+    private func resolvePath(for fileOrFolder: String) -> URL {
+        // 1. Check if the asset is bundled in the App Bundle (supporting flat or nested subdirectories)
+        if fileOrFolder == "onnx" {
+            if let vocoderURL = Bundle.main.url(forResource: "vocoder", withExtension: "onnx") {
+                return vocoderURL.deletingLastPathComponent()
+            }
+            if let vocoderURL = Bundle.main.url(forResource: "vocoder", withExtension: "onnx", subdirectory: "Models/supertonic/onnx") {
+                return vocoderURL.deletingLastPathComponent()
+            }
+        } else if fileOrFolder == "voice_styles" {
+            if let m1URL = Bundle.main.url(forResource: "M1", withExtension: "json") {
+                return m1URL.deletingLastPathComponent()
+            }
+            if let m1URL = Bundle.main.url(forResource: "M1", withExtension: "json", subdirectory: "Models/supertonic/voice_styles") {
+                return m1URL.deletingLastPathComponent()
+            }
+        } else if fileOrFolder.hasPrefix("voice_styles/") {
+            let filename = URL(fileURLWithPath: fileOrFolder).deletingPathExtension().lastPathComponent
+            if let styleURL = Bundle.main.url(forResource: filename, withExtension: "json") {
+                return styleURL
+            }
+            if let styleURL = Bundle.main.url(forResource: filename, withExtension: "json", subdirectory: "Models/supertonic/voice_styles") {
+                return styleURL
+            }
+        }
+
+        // 2. Fall back to local Caches directory (downloaded path)
+        return modelDirectory.appendingPathComponent(fileOrFolder)
     }
 
     var modelState: ModelState = .notDownloaded
@@ -74,9 +106,60 @@ final class SupertonicSynthesizer: Synthesizer {
 
     // MARK: - Model lifecycle
 
+    private func migrateOldModelsIfNeeded() {
+        let fm = FileManager.default
+        let oldModelDirectory = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Models/supertonic", isDirectory: true)
+        
+        let oldSentinel = oldModelDirectory.appendingPathComponent("onnx/vocoder.onnx")
+        let newSentinel = modelDirectory.appendingPathComponent("onnx/vocoder.onnx")
+        
+        if fm.fileExists(atPath: oldSentinel.path) {
+            if !fm.fileExists(atPath: newSentinel.path) {
+                print("[SupertonicSynthesizer] Found voice models in old Documents folder. Migrating to Caches directory...")
+                do {
+                    try fm.createDirectory(at: modelDirectory.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    
+                    if fm.fileExists(atPath: modelDirectory.path) {
+                        try fm.removeItem(at: modelDirectory)
+                    }
+                    
+                    try fm.moveItem(at: oldModelDirectory, to: modelDirectory)
+                    print("[SupertonicSynthesizer] Successfully migrated models to Caches folder.")
+                } catch {
+                    print("[SupertonicSynthesizer] Error migrating old models: \(error)")
+                }
+            } else {
+                print("[SupertonicSynthesizer] Models already migrated to Caches. Cleaning up old Documents/Models directory...")
+            }
+            
+            if fm.fileExists(atPath: oldModelDirectory.path) {
+                do {
+                    try fm.removeItem(at: oldModelDirectory)
+                    print("[SupertonicSynthesizer] Cleaned up old models directory in Documents.")
+                } catch {
+                    print("[SupertonicSynthesizer] Error cleaning up old models directory: \(error)")
+                }
+            }
+        }
+    }
+
     func checkAndPrepare() {
-        let sentinel = modelDirectory
-            .appendingPathComponent("onnx/vocoder.onnx")
+        migrateOldModelsIfNeeded()
+
+        // 1. Proactively check if models are bundled in the App Bundle (Strategy A)
+        if Bundle.main.url(forResource: "vocoder", withExtension: "onnx") != nil ||
+           Bundle.main.url(forResource: "vocoder", withExtension: "onnx", subdirectory: "Models/supertonic/onnx") != nil {
+            print("[SupertonicSynthesizer] Detected bundled voice models in App Bundle. Skipping download phase.")
+            modelState = .loading
+            Task {
+                await self.loadModel()
+            }
+            return
+        }
+
+        // 2. Fall back to checking local caches folder
+        let sentinel = modelDirectory.appendingPathComponent("onnx/vocoder.onnx")
         if FileManager.default.fileExists(atPath: sentinel.path) {
             modelState = .loading
             Task {
@@ -128,19 +211,23 @@ final class SupertonicSynthesizer: Synthesizer {
     }
 
     private func loadModel() async {
-        let onnxDir = modelDirectory.appendingPathComponent("onnx").path
+        let onnxDirURL = resolvePath(for: "onnx")
+        let onnxDir = onnxDirURL.path
         
         // ORTEnv and TextToSpeech creation can be slow and use sync primitives.
-        // Run it in a detached task to avoid blocking the main thread/actor.
-        let result = await Task.detached(priority: .userInitiated) { () -> Result<(ORTEnv, TextToSpeech), Error> in
-            do {
-                let env = try ORTEnv(loggingLevel: .warning)
-                let loadedTTS = try loadTextToSpeech(onnxDir, false, env)
-                return .success((env, loadedTTS))
-            } catch {
-                return .failure(error)
+        // Run it on a dedicated Grand Central Dispatch thread instead of the Swift Concurrency cooperative thread pool
+        // to prevent "unsafeForcedSync" runtime warnings and Cooperative Thread Pool starvation.
+        let result = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let env = try ORTEnv(loggingLevel: .warning)
+                    let loadedTTS = try loadTextToSpeech(onnxDir, false, env)
+                    continuation.resume(returning: Result<(ORTEnv, TextToSpeech), Error>.success((env, loadedTTS)))
+                } catch {
+                    continuation.resume(returning: Result<(ORTEnv, TextToSpeech), Error>.failure(error))
+                }
             }
-        }.value
+        }
 
         switch result {
         case .success(let (env, loadedTTS)):
@@ -148,6 +235,7 @@ final class SupertonicSynthesizer: Synthesizer {
             self.tts = loadedTTS
             self.modelState = .ready
         case .failure(let error):
+            print("[SupertonicSynthesizer] Failed to load model from \(onnxDir): \(error)")
             self.modelState = .error(error.localizedDescription)
         }
     }
@@ -160,9 +248,19 @@ final class SupertonicSynthesizer: Synthesizer {
             return AsyncThrowingStream { $0.finish(throwing: NSError(domain: "SupertonicSynthesizer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Model not loaded"])) }
         }
         
-        let voiceStylePath = modelDirectory
-            .appendingPathComponent("voice_styles")
-            .appendingPathComponent("\(voice.id).json").path
+        let resolvedVoiceStylePath: String
+        let styleFile = "voice_styles/\(voice.id).json"
+        let resolvedURL = resolvePath(for: styleFile)
+            
+        // Graceful fallback to default Marcus (M1) if the voice style file does not exist
+        if FileManager.default.fileExists(atPath: resolvedURL.path) {
+            resolvedVoiceStylePath = resolvedURL.path
+        } else {
+            let fallbackURL = resolvePath(for: "voice_styles/M1.json")
+            print("[SupertonicSynthesizer] Voice style file not found at \(resolvedURL.path). Falling back to M1.")
+            resolvedVoiceStylePath = fallbackURL.path
+        }
+        
         let language = voice.language
         let steps = options.steps
         let speed = options.speed
@@ -170,7 +268,16 @@ final class SupertonicSynthesizer: Synthesizer {
         return AsyncThrowingStream { continuation in
             let task = Task.detached(priority: .userInitiated) { [weak self] in
                 do {
-                    let style = try loadVoiceStyle([voiceStylePath], verbose: false)
+                    let style = try await withCheckedThrowingContinuation { continuation in
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            do {
+                                let loadedStyle = try loadVoiceStyle([resolvedVoiceStylePath], verbose: false)
+                                continuation.resume(returning: loadedStyle)
+                            } catch {
+                                continuation.resume(throwing: error)
+                            }
+                        }
+                    }
                     
                     let maxLen = (language == "ko" || language == "ja") ? 120 : 300
                     let chunks = chunkText(text, maxLen: maxLen)
@@ -179,13 +286,22 @@ final class SupertonicSynthesizer: Synthesizer {
                         if Task.isCancelled { break }
                         
                         let start = Date()
-                        // Synchronous blocking call to ONNX Runtime
-                        let result = try tts.call(
-                            chunkText, language, style,
-                            steps,
-                            speed: Float(speed),
-                            silenceDuration: 0.05
-                        )
+                        // Synchronous blocking call to ONNX Runtime offloaded to GCD to prevent blocking cooperative pool
+                        let result = try await withCheckedThrowingContinuation { continuation in
+                            DispatchQueue.global(qos: .userInitiated).async {
+                                do {
+                                    let callResult = try tts.call(
+                                        chunkText, language, style,
+                                        steps,
+                                        speed: Float(speed),
+                                        silenceDuration: 0.05
+                                    )
+                                    continuation.resume(returning: callResult)
+                                } catch {
+                                    continuation.resume(throwing: error)
+                                }
+                            }
+                        }
                         
                         let audioDuration = Double(result.duration)
                         let factor = audioDuration / max(Date().timeIntervalSince(start), 0.001)

@@ -42,12 +42,13 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
 
     func prepareVoices() {
         Task {
-            let voices: [TTSVoice] = await Task.detached(priority: .utility) {
-                AppleVoiceMapper.availableVoices()
-            }.value
-            let premium: Bool = await Task.detached(priority: .utility) {
-                AppleVoiceMapper.hasPremiumVoice()
-            }.value
+            let (voices, premium) = await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    let voices = AppleVoiceMapper.availableVoices()
+                    let premium = AppleVoiceMapper.hasPremiumVoice()
+                    continuation.resume(returning: (voices, premium))
+                }
+            }
             self.cachedVoices = voices
             self.hasPremiumVoice = premium
         }

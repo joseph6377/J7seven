@@ -9,6 +9,17 @@ enum PlayerState {
     case ended
 }
 
+enum SleepTimerOption: String, CaseIterable, Identifiable {
+    case off = "Off"
+    case m5 = "5 minutes"
+    case m15 = "15 minutes"
+    case m30 = "30 minutes"
+    case h1 = "1 hour"
+    case endOfChapter = "End of Chapter"
+    
+    var id: String { self.rawValue }
+}
+
 @MainActor
 final class ReaderSession: ObservableObject {
     @Published var document: SavedDocument
@@ -20,6 +31,10 @@ final class ReaderSession: ObservableObject {
     @Published var voice: TTSVoice = .default
     @Published var steps: Int = 4
     @Published var activeWordRange: NSRange? = nil
+    
+    @Published var sleepTimerOption: SleepTimerOption = .off
+    @Published var sleepTimerSecondsRemaining: TimeInterval? = nil
+    private var sleepTimer: Timer? = nil
 
     let player: PlayerService
     private(set) var scheduler: any PlaybackScheduler
@@ -37,23 +52,31 @@ final class ReaderSession: ObservableObject {
         let savedSteps = UserDefaults.standard.integer(forKey: "tts.defaultSteps")
         self.steps = savedSteps > 0 ? savedSteps : 4
 
-        // Load default voice if set in UserDefaults
-        let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId")
-        if let savedVoiceId = savedVoiceId {
-            let voices = scheduler is AppleVoiceScheduler 
-                ? (scheduler as? AppleVoiceScheduler)?.cachedVoices ?? []
-                : TTSVoice.loadAll()
-            if let matched = voices.first(where: { $0.id == savedVoiceId }) {
-                self.voice = matched
-            }
-        }
-
+        // Setup callbacks on scheduler before playing
         setupCallbacks(on: scheduler)
+
+        // Load default voice if set in UserDefaults, otherwise fallback
+        let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId")
+        let initialVoice = TTSVoice(
+            id: savedVoiceId ?? "M1",
+            name: "Default",
+            language: "en",
+            gender: .male
+        )
+        self.voice = sanitizeVoice(initialVoice, for: scheduler)
     }
 
     private func setupCallbacks(on sched: any PlaybackScheduler) {
         sched.onParagraphStartedPlaying = { [weak self] cursor in
             guard let self else { return }
+            
+            // Check End of Chapter sleep timer before updating indexes
+            if self.sleepTimerOption == .endOfChapter && cursor.chapterIndex != self.currentChapterIndex {
+                self.pause()
+                self.setSleepTimer(.off)
+                return
+            }
+            
             currentChapterIndex = cursor.chapterIndex
             currentParagraphIndex = cursor.paragraphIndex
             activeWordRange = nil
@@ -217,9 +240,9 @@ final class ReaderSession: ObservableObject {
     }
 
     func setVoice(_ voice: TTSVoice) {
-        self.voice = voice
+        self.voice = sanitizeVoice(voice, for: scheduler)
         if state == .playing {
-            scheduler.advanceTo(cursor: document.cursor, voice: voice)
+            scheduler.advanceTo(cursor: document.cursor, voice: self.voice)
         }
     }
 
@@ -231,12 +254,105 @@ final class ReaderSession: ObservableObject {
         scheduler = newScheduler
         setupCallbacks(on: newScheduler)
 
-        if let first = voices.first { voice = first }
+        self.voice = sanitizeVoice(self.voice, for: newScheduler)
 
         if wasPlaying {
             isBuffering = true
             newScheduler.start(from: document.cursor, in: document, voice: voice)
             player.updateNowPlaying(title: document.title, author: document.author, cover: document.coverImageData)
+        }
+    }
+
+    func setSleepTimer(_ option: SleepTimerOption) {
+        self.sleepTimerOption = option
+        self.sleepTimer?.invalidate()
+        self.sleepTimer = nil
+        self.sleepTimerSecondsRemaining = nil
+        
+        switch option {
+        case .off:
+            break
+        case .m5:
+            startTimer(seconds: 5 * 60)
+        case .m15:
+            startTimer(seconds: 15 * 60)
+        case .m30:
+            startTimer(seconds: 30 * 60)
+        case .h1:
+            startTimer(seconds: 60 * 60)
+        case .endOfChapter:
+            break
+        }
+    }
+
+    private func startTimer(seconds: TimeInterval) {
+        sleepTimerSecondsRemaining = seconds
+        sleepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            Task { @MainActor in
+                if let remaining = self.sleepTimerSecondsRemaining {
+                    if remaining <= 1 {
+                        self.pause()
+                        self.setSleepTimer(.off)
+                    } else {
+                        self.sleepTimerSecondsRemaining = remaining - 1
+                    }
+                }
+            }
+        }
+    }
+
+    private func sanitizeVoice(_ voiceToSanitize: TTSVoice, for sched: any PlaybackScheduler) -> TTSVoice {
+        if sched is AppleVoiceScheduler {
+            let appleVoices = (sched as? AppleVoiceScheduler)?.cachedVoices ?? []
+            let available = appleVoices.isEmpty ? AppleVoiceMapper.availableVoices() : appleVoices
+            
+            // If the voice is already a valid Apple voice in our list, use it
+            if let matched = available.first(where: { $0.id == voiceToSanitize.id }) {
+                return matched
+            }
+            
+            // If it starts with apple- but isn't in our list (maybe cachedVoices is empty but it is valid),
+            // we can still use it or try to find a match in availableVoices
+            if voiceToSanitize.id.hasPrefix("apple-") {
+                if let matched = AppleVoiceMapper.availableVoices().first(where: { $0.id == voiceToSanitize.id }) {
+                    return matched
+                }
+                return voiceToSanitize
+            }
+            
+            // Otherwise, try to load default from UserDefaults if it's an Apple voice
+            if let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId"),
+               savedVoiceId.hasPrefix("apple-") {
+                if let matched = AppleVoiceMapper.availableVoices().first(where: { $0.id == savedVoiceId }) {
+                    return matched
+                }
+            }
+            
+            // Fallback to first available Apple voice
+            if let firstApple = available.first {
+                return firstApple
+            }
+            if let firstAvailable = AppleVoiceMapper.availableVoices().first {
+                return firstAvailable
+            }
+            
+            return voiceToSanitize
+        } else {
+            let supertonicVoices = TTSVoice.loadAll()
+            if let matched = supertonicVoices.first(where: { $0.id == voiceToSanitize.id }) {
+                return matched
+            }
+            
+            // If not matched, try to load default from UserDefaults if it's a Supertonic voice
+            if let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId"),
+               supertonicVoices.contains(where: { $0.id == savedVoiceId }) {
+                if let matched = supertonicVoices.first(where: { $0.id == savedVoiceId }) {
+                    return matched
+                }
+            }
+            
+            return TTSVoice.default
         }
     }
 }

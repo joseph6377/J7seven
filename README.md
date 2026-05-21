@@ -2,172 +2,202 @@
 
 An iOS app that reads EPUB books aloud using fully on-device AI text-to-speech. No cloud calls, no per-minute cost, no audio stored to disk. Import an EPUB, tap play, and the app synthesizes speech in real time as you listen.
 
+---
+
 ## Features
 
-- **Ephemeral streaming TTS** — audio is generated and played live; nothing is ever written to disk
-- **On-device synthesis** — powered by [Supertonic 3](https://github.com/supertone-inc/supertonic) (ONNX, ~400 MB one-time download)
-- **10 voices** — 5 male (Marcus, Nathan, Oliver, Paul, Ryan) and 5 female (Alice, Beth, Claire, Diana, Eve)
-- **31 languages** — English, Korean, Japanese, Arabic, French, German, Spanish, and more
-- **Paragraph-level cursor** — position is persisted across launches; resume exactly where you left off
-- **Playback speed control** — via `AVAudioUnitTimePitch` (pitch-preserving, no re-synthesis needed)
-- **Background audio** — continues playing with the screen off; Lock Screen controls and Now Playing info
-- **Bluetooth quality** — `AVAudioSession` configured with `.spokenAudio` mode and `.longFormAudio` policy for AAC codec on wireless headphones
+- **Ephemeral Streaming TTS** — Audio is generated and played live; nothing is ever written to disk. Closing the app discards all in-flight buffers, keeping your local storage completely footprint-free.
+- **On-Device Synthesis** — Powered by [Supertonic 3](https://github.com/supertone-inc/supertonic) (ONNX Runtime, ~400 MB one-time cache download).
+- **10 Curated Voices** — 5 male (Marcus, Nathan, Oliver, Paul, Ryan) and 5 female (Alice, Beth, Claire, Diana, Eve) style profiles.
+- **31 Languages** — Full native support for English, Korean, Japanese, Arabic, French, German, Spanish, Hindi, and more.
+- **App Store & iCloud Compliant** — Voice models reside in the standard `Library/Caches/` sandbox directory rather than `Documents/` to satisfy Apple's App Store Review guidelines regarding backup sizes. Includes an automatic, self-healing model migration and automatic cleanup of legacy directories.
+- **Privacy Manifest Compliant** — Ships with an official `PrivacyInfo.xcprivacy` manifest defining required usage declarations for system APIs (`UserDefaults`, `FileTimestamp`, and `DiskSpace`).
+- **Cooperative Thread Safe** — CPU-intensive ONNX model loading and synchronous synthesis (`tts.call`) are systematically offloaded to user-initiated Grand Central Dispatch (GCD) background queues rather than the cooperative Swift Concurrency thread pool, resolving `unsafeForcedSync` runtime warnings and avoiding thread starvation.
+- **Universal EPUB Handler ("Open In" Support)** — Registered system-wide as an EPUB document viewer. Tap or share an `.epub` file from external applications (Files, Safari, Mail, Slack) to instantly launch J7seven and import the book.
+- **Strategy A Pre-bundled Asset Support** — Detects and registers pre-packaged voice models within the App Bundle to bypass downloading and enable instant offline play out of the box.
+- **Editorial UI/UX Player Overhaul** — Features an immersive serif reading canvas with automatic control auto-hiding, glowing paragraph active-sentence highlights, precise word-level highlight focus boxes, segments for speed/inference quality, and a collapsible/expandable transport card.
+- **Paragraph-Level Cursor Tracking** — Current chapter and paragraph focus are persisted locally in real time so you can resume exactly where you left off.
+- **Playback Speed Control** — Utilizes `AVAudioUnitTimePitch` for pitch-preserving speed modification (0.8× to 2.0×) in the playback engine, requiring no expensive voice re-synthesis.
+- **Background Audio & Remote Controls** — Continues rendering and playing with the screen off; fully integrated with System Lock Screen controls and Now Playing info.
+- **Bluetooth Optimization** — Configures `AVAudioSession` with `.spokenAudio` mode and `.longFormAudio` policy to leverage high-quality AAC compression over wireless AirPods and Bluetooth accessories.
+
+---
 
 ## Requirements
 
-- iOS 17.0+
-- Xcode 16+
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (to regenerate the `.xcodeproj` from `project.yml`)
+- **iOS 17.0+**
+- **Xcode 16+**
+- **[XcodeGen](https://github.com/yonaskolb/XcodeGen)** (to generate and synchronize the `.xcodeproj` configuration from `project.yml`)
+
+---
 
 ## Getting Started
 
 ```bash
-# 1. Clone
+# 1. Clone the repository
 git clone <repo-url>
 cd "BooksApp v2"
 
-# 2. Generate the Xcode project
+# 2. Generate the Xcode project and test target
 xcodegen generate
 
-# 3. Open and build
+# 3. Open and build in Xcode
 open BooksAppV2.xcodeproj
 ```
 
-On first launch the app will prompt to download the Supertonic 3 model (~400 MB). This is a one-time download stored at `Documents/Models/supertonic/`.
+*On first launch, if voice assets are not pre-bundled in the application, you will be prompted to download the Supertonic 3 model (~400 MB). This download is securely stored inside the sandbox `Library/Caches/supertonic/` folder, ensuring compliance.*
+
+---
 
 ## Architecture
 
 ```
-EPUB file
-    │
-    ▼
-EpubTextParser          → chapters: [ChapterText { paragraphs: [String] }]
-    │
-    ▼
-LibraryService          → SavedDocument persisted to Documents/library/[uuid].json
-    │
-    ▼
-ReaderSession           → active playback state (cursor, rate, voice, play/pause)
-    │
-    ▼
-SynthScheduler          → look-ahead buffer of 3 paragraphs
-    │           ▲
-    ▼           │ PCMChunk (float32 @ 44.1 kHz)
-SupertonicSynthesizer   → ONNX Runtime inference (Supertonic 3, 4 steps default)
-    │
-    ▼
-PlayerService           → AVAudioEngine + AVAudioPlayerNode + AVAudioUnitTimePitch
-    │
-    ▼
-  speaker + Lock Screen Now Playing
+         EPUB / Open-In
+               │
+               ▼
+     [ EpubTextParser ]        ──▶ chapters: [ChapterText { paragraphs: [String] }]
+               │
+               ▼
+     [ LibraryService ]        ──▶ SavedDocument persisted to Documents/library/[uuid].json
+               │
+               ▼
+     [ ReaderSession ]         ──▶ active playback state (cursor, rate, voice, play/pause)
+               │
+               ▼
+     [ SynthScheduler ]        ──▶ look-ahead buffer of 3 paragraphs (Swift Concurrency)
+         │          ▲
+         ▼          │ PCMChunk (float32 @ 44.1 kHz)
+[ SupertonicSynthesizer ]     ──▶ ONNX Runtime inference (GCD Thread offloading)
+         │
+         ▼
+     [ PlayerService ]         ──▶ AVAudioEngine + AVAudioPlayerNode + AVAudioUnitTimePitch
+         │
+         ▼
+ speaker + Lock Screen Now Playing
 ```
 
-### Key types
+### Key Components
 
-| Type | File | Role |
+| Component | Target File | Role |
 |---|---|---|
-| `SavedDocument` | `Models.swift` | Persisted document: text + cursor, no audio |
-| `PlaybackCursor` | `Models.swift` | Chapter + paragraph index |
-| `ReaderSession` | `ReaderSession.swift` | ObservableObject wiring UI to scheduler |
-| `SupertonicSynthesizer` | `TTS/SupertonicSynthesizer.swift` | `Synthesizer` protocol impl; yields `PCMChunk` via `AsyncThrowingStream` |
-| `SynthScheduler` | `TTS/SynthScheduler.swift` | Consumes the stream; schedules `AVAudioPCMBuffer` onto the player node |
-| `PlayerService` | `PlayerService.swift` | Owns `AVAudioEngine`; exposes `schedule/play/pause/stop/setRate` |
+| `SavedDocument` | `Models.swift` | Persisted document container containing text, chapter layouts, and current cursor position. |
+| `PlaybackCursor` | `Models.swift` | Tracks precise `chapterIndex` and `paragraphIndex` pointer positions. |
+| `ReaderSession` | `ReaderSession.swift` | Orchestrator object binding the UI layers with the underlying synthesizers and players. |
+| `SupertonicSynthesizer` | `TTS/SupertonicSynthesizer.swift` | Implements `Synthesizer`; executes ONNX Runtime inference offloaded to background threads. |
+| `SynthScheduler` | `TTS/SynthScheduler.swift` | Consumes paragraph streams, manages buffering, and feeds buffers to the playback engine. |
+| `PlayerService` | `PlayerService.swift` | Owns `AVAudioEngine`, configures lock screen metadata, and plays audio chunks. |
+| `ZipExtractor` | `ZipExtractor.swift` | Extracts EPUB packages without memory leaks using central directory stream processing. |
 
-### Persistence
+### Sandbox & Caching Layout
 
-Only text is persisted — never audio:
+- `Documents/library/[uuid].json` — Persists `SavedDocument` objects (titles, authors, custom cover data, and texts). Absolutely no audio PCM files are ever written to disk.
+- `Library/Caches/supertonic/` — Houses downloaded ONNX models and style style sheets. Automatically excluded from iCloud backups, adhering to App Store size constraints.
 
-- `Documents/library/[uuid].json` — `SavedDocument` (title, author, cover thumbnail, chapters as plain strings, cursor)
-- `Documents/Models/supertonic/` — ONNX model files (downloaded once)
+---
 
-Audio bytes (PCM, WAV, M4A) are never written to disk. Closing the app discards all in-flight audio; reopening re-synthesizes from the saved cursor.
-
-## Audio pipeline details
+## Audio Pipeline Details
 
 | Stage | Detail |
 |---|---|
-| Synthesis | Supertonic 3, 4 inference steps (balanced), 44.1 kHz mono float32 |
-| Silence | 50 ms between sentence sub-chunks; 75 ms appended after each paragraph buffer |
-| Normalization | Per-buffer peak normalize to −1.4 dBFS via `vDSP_maxmgv` / `vDSP_vsmul` |
-| Speed control | `AVAudioUnitTimePitch` (pitch-preserving); applied at playback layer — no re-synthesis |
-| Audio session | `.playback` category, `.spokenAudio` mode, `.longFormAudio` routing policy |
-| Interruptions | Pause on interruption begin; resume on `.shouldResume` |
+| **Synthesis** | Supertonic 3, configurable inference steps (Fast: 2, Balanced: 4, High: 5), 44.1 kHz mono float32 PCM. |
+| **GCD Offloading** | Core synthesis and setup routines are isolated onto custom concurrent `DispatchQueue` pools to prevent blocking Swift's cooperative threads. |
+| **Silence Insertion** | 50 ms between internal sentence sub-chunks; 75 ms cushion appended at the end of each paragraph buffer. |
+| **Normalization** | Per-buffer peak volume normalization calibrated to −1.4 dBFS using Apple's Accelerate framework (`vDSP_maxmgv` / `vDSP_vsmul`). |
+| **Speed Control** | Pitch-preserving speed modification handled inside the `AVAudioUnitTimePitch` layer (no speech re-synthesis). |
+| **Interruptions** | Immediate pause on telephone or system interrupts, with intelligent `.shouldResume` auto-restart logic. |
 
-## Source layout
+---
+
+## Source Layout
 
 ```
 Sources/
   App/
-    AppState.swift              Root observable, composes all services
-    BooksAppV2.swift            SwiftUI App entry point
-    ReaderSession.swift         Playback coordinator (ObservableObject)
+    AppState.swift              Root observable class; coordinates sub-services.
+    BooksAppV2.swift            SwiftUI main app entry point.
+    ReaderSession.swift         Main playback session orchestrator.
   Models/
-    Models.swift                SavedDocument, ChapterText, PlaybackCursor, LibraryEntry
+    Models.swift                Structures representing book schemas, chapters, and cursors.
   Services/
-    LibraryPaths.swift          Documents/library/ path helpers
-    LibraryService.swift        CRUD for SavedDocument JSON files
-    PlayerService.swift         AVAudioEngine pipeline + NowPlaying + remote commands
-    ZipExtractor.swift          Central Directory ZIP extractor (robust support for streaming & data descriptors)
-    Keychain.swift / ServerConfig.swift
+    LibraryPaths.swift          Sandbox paths and directory configuration helpers.
+    LibraryService.swift        Secure JSON reading and writing for imported books.
+    PlayerService.swift         Low-level audio pipeline, remote controls, and background audio.
+    ZipExtractor.swift          Robust ZIP processing for EPUB containers.
     TTS/
-      AppleVoiceScheduler.swift Speech synthesis scheduler for Apple's built-in AVSpeechSynthesizer
-      EpubTextParser.swift      EPUB → [ChapterText] (XHTML spine → plain text)
-      SupertonicHelper.swift    ONNX Runtime wrappers (TextToSpeech, UnicodeProcessor, etc.)
-      SupertonicSynthesizer.swift  Synthesizer protocol; model download + ONNX inference
-      SynthScheduler.swift      Look-ahead buffer scheduling, cursor advancement
-      TTSEngine.swift           Enum representing the selected speech engine
-      TTSVoice.swift            10 voice definitions (M1–M5, F1–F5)
-      XMLIndexer.swift          Lightweight XML parser for EPUB metadata
+      AppleVoiceScheduler.swift Legacy/fallback scheduling for Apple AVSpeechSynthesizer.
+      EpubTextParser.swift      Translates XML/XHTML spin contents into normalized string chunks.
+      SupertonicHelper.swift    Low-level Swift bindings wrapping ONNX Runtime environments.
+      SupertonicSynthesizer.swift High-performance ONNX synthesizer with GCD thread isolation.
+      SynthScheduler.swift      Manages ahead-of-time synthesis blocks.
+      TTSEngine.swift           Selected speech synthesizer selector (Supertonic 3 vs. Apple Voice).
+      TTSVoice.swift            Language mappings and voice style definitions.
+      XMLIndexer.swift          XML traversal helper for container metadata files.
   Views/
-    ContentView.swift           Root container view with bottom tab bar navigation and import alerts
+    ContentView.swift           Frosted bottom-navigation tab container.
     Library/
-      ImportView.swift          UI for choosing synthesis quality settings & initiating EPUB imports
-      LibraryView.swift         The shelf grid/list view with stats and appearance/engine pickers
-      VoicesView.swift          Voice tester and selection settings panel
-    Player/AudioPlayerView.swift
-    Player/MiniPlayerView.swift
-    Components/CoverImageView.swift
-    Components/MiniPlayerView.swift
-    TTS/ModelDownloadView.swift
+      ImportView.swift          UI picker options for import parameters and downloading weights.
+      LibraryView.swift         Beautiful Grid shelf displaying book covers, reading times, and search.
+      VoicesView.swift          Interactive custom voice tester with text pre-generation.
+    Player/
+      AudioPlayerView.swift     Full-screen serif reader canvas, glowing active lines, and collapsed sliders.
+      MiniPlayerView.swift      Collapsible synchronized bottom mini controller.
+    Components/
+      CoverImageView.swift      Asynchronous image loading, caching, and cover art styling.
+    TTS/
+      ModelDownloadView.swift   Interactive download progress overlay for voice engine models.
+  PrivacyInfo.xcprivacy         App Store mandatory privacy manifest recording system API footprint.
+
+Tests/                          Automated unit-testing suite.
+  EpubTextParserTests.swift     Validates XHTML structure scrubbing and paragraph parsing.
+  LibraryServiceTests.swift     Validates document storage cycles, progress tracking, and WPM timing.
+  XMLIndexerTests.swift         Validates OPF/NCX index reading.
+  ZipExtractorTests.swift       Validates local folder inflation and directory streaming.
 ```
 
-## Voices
+---
 
-| ID | Name | Gender |
-|---|---|---|
-| M1 | Marcus | Male |
-| M2 | Nathan | Male |
-| M3 | Oliver | Male |
-| M4 | Paul | Male |
-| M5 | Ryan | Male |
-| F1 | Alice | Female |
-| F2 | Beth | Female |
-| F3 | Claire | Female |
-| F4 | Diana | Female |
-| F5 | Eve | Female |
+## Voices & Languages
 
-Voice style files are downloaded from [Supertone/supertonic-3 on HuggingFace](https://huggingface.co/Supertone/supertonic-3) as part of the one-time model download.
+### Style Profiles
 
-## Supported languages
+| ID | Name | Gender | Role |
+|---|---|---|---|
+| **M1** | Marcus | Male | Default Voice / Fallback |
+| **M2** | Nathan | Male | Modern Conversational |
+| **M3** | Oliver | Male | Deep Narrative |
+| **M4** | Paul | Male | Editorial / Formal |
+| **M5** | Ryan | Male | Bright / Dynamic |
+| **F1** | Alice | Female | Warm Narrative |
+| **F2** | Beth | Female | Soft Conversational |
+| **F3** | Claire | Female | Clear / Present |
+| **F4** | Diana | Female | Rich / Storyteller |
+| **F5** | Eve | Female | Cinematic / Melodious |
 
+Voice files are dynamically resolved at runtime with safety fallbacks: if a requested file is absent, the system gracefully resolves to `M1.json` (Marcus) to ensure uninterrupted reading.
+
+### Supported Languages
 English, Korean, Japanese, Arabic, Bulgarian, Czech, Danish, German, Greek, Spanish, Estonian, Finnish, French, Hindi, Croatian, Hungarian, Indonesian, Italian, Lithuanian, Latvian, Dutch, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Swedish, Turkish, Ukrainian, Vietnamese.
 
-## Dependencies
+---
 
-| Package | Version | Purpose |
-|---|---|---|
-| [onnxruntime-swift-package-manager](https://github.com/microsoft/onnxruntime-swift-package-manager) | ≥ 1.16.0 | On-device ONNX inference for Supertonic 3 |
+## Unit Testing
 
-## Future / out of scope
+J7seven is backed by an automated testing suite to verify structural pipelines.
 
-- Word-level karaoke highlighting (requires per-token timing from TTS engine)
-- PDF support
-- Cloud TTS tier (the `Synthesizer` protocol is designed to accommodate a `CartesiaSynthesizer` or similar swap-in)
-- Position sync across devices
-- Export to audio file (intentionally not a feature — the app is ephemeral by design)
+### Running Tests from terminal:
+```bash
+xcodebuild test -project BooksAppV2.xcodeproj -scheme BooksAppV2 -destination "platform=iOS Simulator,name=iPhone 17"
+```
+
+The tests cover:
+- **ZIP Extraction**: Validates signature reading and resilient file extraction without memory leak.
+- **XML Index Parsing**: Ensures metadata fields from OPF spine schemas translate safely.
+- **EPUB Paragraphing**: Checks text sanitization to remove embedded script elements or styling tags from paragraphs.
+- **Document Progress Operations**: Confirms progress estimation math (e.g. 60% completion) and reading duration estimates based on Average Words Per Minute (WPM).
+
+---
 
 ## Credits & Acknowledgements
 
 This application is built on top of the incredible open-source work by **Supertone, Inc.** 
-Special thanks to their team for developing and open-sourcing [Supertonic 3](https://github.com/supertone-inc/supertonic) and publishing the model style assets on [Hugging Face](https://huggingface.co/Supertone/supertonic-3), enabling premium, fully offline, and high-performance text-to-speech synthesis directly on-device.
-
+Special thanks to their engineering team for developing and open-sourcing [Supertonic 3](https://github.com/supertone-inc/supertonic) and publishing the model style assets on [Hugging Face](https://huggingface.co/Supertone/supertonic-3), enabling premium, fully offline, and high-performance text-to-speech synthesis directly on-device.

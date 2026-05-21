@@ -4,6 +4,7 @@ import Accelerate
 
 struct VoicesView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var samplePlayer = VoiceSamplePlayer()
     @State private var showModelDownload = false
 
@@ -96,6 +97,11 @@ struct VoicesView: View {
             }
             .navigationTitle("Voices")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
             .onDisappear {
                 samplePlayer.stop()
             }
@@ -155,6 +161,10 @@ struct VoicesView: View {
     }
 
     private func selectVoice(_ voice: TTSVoice) {
+        // Automatically synchronize active engine with selected voice type
+        let isApple = voice.id.hasPrefix("apple-")
+        appState.selectedEngine = isApple ? .apple : .supertonic
+
         if let activeSession = appState.activeSession {
             activeSession.setVoice(voice)
         }

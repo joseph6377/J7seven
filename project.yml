@@ -51,10 +51,24 @@ targets:
           - audio
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
-    entitlements:
-      path: BooksAppV2/BooksAppV2.entitlements
-      properties:
-        com.apple.security.app-sandbox: false
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: "EPUB Document"
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - org.idpf.epub-container
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.idpf.epub-container
+            UTTypeDescription: "EPUB Document"
+            UTTypeConformsTo:
+              - public.data
+              - public.composite-content
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - epub
+              public.mime-type:
+                - application/epub+zip
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: in.josepht.booksappv2
@@ -65,3 +79,16 @@ targets:
         INFOPLIST_FILE: BooksAppV2/Info.plist
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
+
+  BooksAppV2Tests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: BooksAppV2
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+

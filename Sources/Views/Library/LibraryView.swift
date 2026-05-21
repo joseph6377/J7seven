@@ -1,10 +1,10 @@
 import SwiftUI
 
 enum LibraryFilter: String, CaseIterable {
-    case shelf = "My Shelf"
+    case shelf = "All Books"
     case favorites = "Favorites"
-    case history = "History"
 }
+
 
 struct LibraryView: View {
     @Environment(AppState.self) private var appState
@@ -14,6 +14,13 @@ struct LibraryView: View {
     @State private var showModelDownload = false
     @State private var isGridView = true
     @State private var favorites: Set<UUID> = Set()
+    @State private var showStats = false
+    
+    // File Import States for 2026 standards
+    @State private var showFilePicker = false
+    @State private var pendingImportURL: URL?
+    @State private var importErrorMessage = ""
+    @State private var showImportError = false
 
     // Computed list of books filtered by search query
     private var filteredBooks: [LibraryEntry] {
@@ -37,48 +44,81 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if isSearchActive {
-                searchField
-            }
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 0) {
+                if isSearchActive {
+                    searchField
+                }
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    // Stats Dashboard (2026 Premium touch!)
-                    statsDashboard
-
-                    // Filter chips matching the new editorial style
-                    filterChipsSection
-
-                    // Content area
-                    Group {
-                        switch selectedFilter {
-                        case .shelf:
-                            if filteredBooks.isEmpty {
-                                if !searchText.isEmpty {
-                                    noResultsState
-                                } else {
-                                    emptyState
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        // Stats Pill & Toggleable Stats Dashboard (2026 Standards)
+                        HStack {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    showStats.toggle()
                                 }
-                            } else {
-                                bookContent(for: filteredBooks)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text("⚡️")
+                                        .font(.caption)
+                                    Text("4.8h read")
+                                        .font(.system(size: 11, weight: .bold))
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .rotationEffect(.degrees(showStats ? 180 : 0))
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.accentColor.opacity(showStats ? 0.15 : 0.08), in: Capsule())
+                                .foregroundStyle(Color.accentColor)
                             }
-                        case .favorites:
-                            if favoritedBooks.isEmpty {
-                                favoritesEmptyState
-                            } else {
-                                bookContent(for: favoritedBooks)
-                            }
-                        case .history:
-                            if historyBooks.isEmpty {
-                                emptyState
-                            } else {
-                                bookContent(for: historyBooks)
+                            .buttonStyle(.plain)
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 6)
+                        
+                        if showStats {
+                            statsDashboard
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+
+                        // Filter chips matching the new editorial style
+                        filterChipsSection
+
+                        // Content area
+                        Group {
+                            switch selectedFilter {
+                            case .shelf:
+                                if filteredBooks.isEmpty {
+                                    if !searchText.isEmpty {
+                                        noResultsState
+                                    } else {
+                                        emptyState
+                                    }
+                                } else {
+                                    bookContent(for: filteredBooks)
+                                }
+                            case .favorites:
+                                if favoritedBooks.isEmpty {
+                                    favoritesEmptyState
+                                } else {
+                                    bookContent(for: favoritedBooks)
+                                }
                             }
                         }
                     }
                 }
             }
+            
+            // Premium Floating Action Button for importing books
+            floatingImportButton
+                .padding(.trailing, 20)
+                .padding(.bottom, 24)
         }
         .onAppear {
             appState.refresh()
@@ -98,14 +138,40 @@ struct LibraryView: View {
                 toolbarActions
             }
         }
+        .fileImporter(isPresented: $showFilePicker,
+                      allowedContentTypes: [.epub],
+                      allowsMultipleSelection: false) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                Task {
+                    if url.startAccessingSecurityScopedResource() {
+                        defer { url.stopAccessingSecurityScopedResource() }
+                        await importEpub(url: url)
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showModelDownload) {
             ModelDownloadView(
                 synthesizer: appState.supertonicSynthesizer,
                 onReady: {
                     appState.selectedEngine = .supertonic
+                    if let url = pendingImportURL {
+                        Task { await importEpub(url: url); pendingImportURL = nil }
+                    }
+                },
+                onQuickStart: {
+                    appState.selectedEngine = .apple
+                    if let url = pendingImportURL {
+                        Task { await importEpub(url: url); pendingImportURL = nil }
+                    }
                 }
             )
             .preferredColorScheme(appState.selectedAppearance.colorScheme)
+        }
+        .alert("Import Failed", isPresented: $showImportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importErrorMessage)
         }
     }
 
@@ -217,31 +283,34 @@ struct LibraryView: View {
     }
 
     private var filterChipsSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(LibraryFilter.allCases, id: \.self) { filter in
-                    Button {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                            selectedFilter = filter
-                        }
-                    } label: {
-                        Text(filter.rawValue)
-                            .font(.system(size: 13, weight: .bold, design: .serif))
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(selectedFilter == filter ? Color.primary : Color.primary.opacity(0.05))
-                            .foregroundStyle(selectedFilter == filter ? Color(.systemBackground) : Color.primary)
-                            .clipShape(Capsule())
+        HStack(spacing: 0) {
+            ForEach(LibraryFilter.allCases, id: \.self) { filter in
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                        selectedFilter = filter
                     }
-                    .buttonStyle(.plain)
+                } label: {
+                    Text(filter.rawValue)
+                        .font(.system(size: 13, weight: .bold, design: .serif))
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            selectedFilter == filter ? 
+                            Color.primary.opacity(0.06) : Color.clear
+                        )
+                        .foregroundStyle(selectedFilter == filter ? Color.primary : Color.primary.opacity(0.4))
+                        .clipShape(Capsule())
                 }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
         }
+        .padding(4)
+        .background(Color.primary.opacity(0.02), in: Capsule())
+        .overlay(Capsule().stroke(Color.primary.opacity(0.05), lineWidth: 0.5))
+        .padding(.horizontal, 16)
         .padding(.top, 4)
-        .padding(.bottom, 8)
+        .padding(.bottom, 12)
     }
 
     private var toolbarActions: some View {
@@ -347,36 +416,29 @@ struct LibraryView: View {
     @ViewBuilder
     private func gridShelf(for books: [LibraryEntry]) -> some View {
         LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 16),
-            GridItem(.flexible(), spacing: 16),
-            GridItem(.flexible(), spacing: 16)
-        ], spacing: 20) {
+            GridItem(.flexible(), spacing: 24),
+            GridItem(.flexible(), spacing: 24)
+        ], spacing: 28) {
             ForEach(books) { entry in
                 Button {
                     appState.openDocument(entry)
                 } label: {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 10) {
                         CoverImageView(id: entry.id)
-                            .frame(width: 90, height: 135)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 4)
-                            .rotation3DEffect(
-                                .degrees(5),
-                                axis: (x: 0.0, y: 1.0, z: 0.0),
-                                anchor: .center,
-                                perspective: 0.3
-                            )
+                            .frame(width: 140, height: 210)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 5)
                         
-                        VStack(spacing: 2) {
+                        VStack(spacing: 4) {
                             Text(entry.title)
-                                .font(.system(size: 12, weight: .bold, design: .serif))
+                                .font(.system(size: 14, weight: .bold, design: .serif))
                                 .lineLimit(1)
                                 .multilineTextAlignment(.center)
                                 .foregroundStyle(.primary)
                             
                             if let author = entry.author {
                                 Text(author)
-                                    .font(.system(size: 10))
+                                    .font(.system(size: 11))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
@@ -552,6 +614,58 @@ struct LibraryView: View {
             Spacer()
         }
         .frame(minHeight: 450)
+    }
+
+    private var floatingImportButton: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            showFilePicker = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 56, height: 56)
+                .background(
+                    Circle()
+                        .fill(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                )
+                .shadow(color: Color.accentColor.opacity(0.35), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, appState.activeSession != nil && !appState.showPlayer ? 88 : 0)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.activeSession != nil && !appState.showPlayer)
+    }
+
+    private func importEpub(url: URL) async {
+        if appState.selectedEngine == .supertonic,
+           case .notDownloaded = appState.supertonicSynthesizer.modelState {
+            pendingImportURL = url
+            showModelDownload = true
+            return
+        }
+        
+        do {
+            let parsed = try EpubTextParser.parse(epubURL: url)
+            let doc = SavedDocument(
+                id: UUID(),
+                title: parsed.title,
+                author: parsed.author,
+                coverImageData: parsed.coverData,
+                importedAt: Date(),
+                lastOpenedAt: Date(),
+                chapters: parsed.chapters.enumerated().map { idx, ch in
+                    ChapterText(index: idx, title: ch.title, paragraphs: ch.paragraphs)
+                },
+                cursor: PlaybackCursor()
+            )
+            appState.libraryService.saveDocument(doc)
+            appState.refresh()
+            appState.openDocument(LibraryEntry(from: doc))
+        } catch {
+            print("[Import] Error: \(error)")
+            self.importErrorMessage = error.localizedDescription
+            self.showImportError = true
+        }
     }
 }
 
