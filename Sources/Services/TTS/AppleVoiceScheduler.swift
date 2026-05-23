@@ -15,6 +15,7 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
     var onParagraphStartedPlaying: ((PlaybackCursor) -> Void)?
     var onFirstAudioReady: (() -> Void)?
     var onWordRangeChanged: ((NSRange) -> Void)?
+    var onPlaybackError: ((any Error) -> Void)?
 
     // MARK: - Private state
 
@@ -202,7 +203,7 @@ extension AppleVoiceScheduler: AVSpeechSynthesizerDelegate {
         }
     }
 
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOf characterRange: NSRange, utterance: AVSpeechUtterance) {
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
         let id = ObjectIdentifier(utterance)
         Task { @MainActor [weak self] in
             guard let self = self else { return }

@@ -188,8 +188,12 @@ enum EpubTextParser {
 
     private static func collectText(_ node: XMLIndexer) -> String {
         var parts: [String] = []
-        if !node.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            parts.append(node.text.trimmingCharacters(in: .whitespacesAndNewlines))
+        let trimmed = node.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            let collapsed = trimmed.components(separatedBy: .whitespacesAndNewlines)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            parts.append(collapsed)
         }
         for child in node.children { parts.append(collectText(child)) }
         return parts.filter { !$0.isEmpty }.joined(separator: " ")

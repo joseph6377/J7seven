@@ -1,4 +1,4 @@
-# J7seven — EPUB Audiobook Reader
+# J7 Listen — EPUB Audiobook Reader
 
 An iOS app that reads EPUB books aloud using fully on-device AI text-to-speech. No cloud calls, no per-minute cost, no audio stored to disk. Import an EPUB, tap play, and the app synthesizes speech in real time as you listen.
 
@@ -8,12 +8,12 @@ An iOS app that reads EPUB books aloud using fully on-device AI text-to-speech. 
 
 - **Ephemeral Streaming TTS** — Audio is generated and played live; nothing is ever written to disk. Closing the app discards all in-flight buffers, keeping your local storage completely footprint-free.
 - **On-Device Synthesis** — Powered by [Supertonic 3](https://github.com/supertone-inc/supertonic) (ONNX Runtime, ~400 MB one-time cache download).
-- **10 Curated Voices** — 5 male (Marcus, Nathan, Oliver, Paul, Ryan) and 5 female (Alice, Beth, Claire, Diana, Eve) style profiles.
-- **31 Languages** — Full native support for English, Korean, Japanese, Arabic, French, German, Spanish, Hindi, and more.
+- **80 Curated Voices** — 10 gender-balanced style profiles localized across 8 supported languages using popular, culturally-appropriate names.
+- **8 Languages** — Native, fully-localized support for English, Spanish, French, German, Italian, Portuguese, Japanese, and Korean.
 - **App Store & iCloud Compliant** — Voice models reside in the standard `Library/Caches/` sandbox directory rather than `Documents/` to satisfy Apple's App Store Review guidelines regarding backup sizes. Includes an automatic, self-healing model migration and automatic cleanup of legacy directories.
 - **Privacy Manifest Compliant** — Ships with an official `PrivacyInfo.xcprivacy` manifest defining required usage declarations for system APIs (`UserDefaults`, `FileTimestamp`, and `DiskSpace`).
 - **Cooperative Thread Safe** — CPU-intensive ONNX model loading and synchronous synthesis (`tts.call`) are systematically offloaded to user-initiated Grand Central Dispatch (GCD) background queues rather than the cooperative Swift Concurrency thread pool, resolving `unsafeForcedSync` runtime warnings and avoiding thread starvation.
-- **Universal EPUB Handler ("Open In" Support)** — Registered system-wide as an EPUB document viewer. Tap or share an `.epub` file from external applications (Files, Safari, Mail, Slack) to instantly launch J7seven and import the book.
+- **Universal EPUB Handler ("Open In" Support)** — Registered system-wide as an EPUB document viewer. Tap or share an `.epub` file from external applications (Files, Safari, Mail, Slack) to instantly launch J7 Listen and import the book.
 - **Strategy A Pre-bundled Asset Support** — Detects and registers pre-packaged voice models within the App Bundle to bypass downloading and enable instant offline play out of the box.
 - **Editorial UI/UX Player Overhaul** — Features an immersive serif reading canvas with automatic control auto-hiding, glowing paragraph active-sentence highlights, precise word-level highlight focus boxes, segments for speed/inference quality, and a collapsible/expandable transport card.
 - **Paragraph-Level Cursor Tracking** — Current chapter and paragraph focus are persisted locally in real time so you can resume exactly where you left off.
@@ -115,6 +115,7 @@ Sources/
   App/
     AppState.swift              Root observable class; coordinates sub-services.
     BooksAppV2.swift            SwiftUI main app entry point.
+    Font+Theme.swift            Unified typography scale & branding font styles.
     ReaderSession.swift         Main playback session orchestrator.
   Models/
     Models.swift                Structures representing book schemas, chapters, and cursors.
@@ -135,6 +136,7 @@ Sources/
   Views/
     ContentView.swift           Frosted bottom-navigation tab container.
     Library/
+      AboutView.swift           Compact 'About J7 Listen' branding sheet containing website links.
       ImportView.swift          UI picker options for import parameters and downloading weights.
       LibraryView.swift         Beautiful Grid shelf displaying book covers, reading times, and search.
       VoicesView.swift          Interactive custom voice tester with text pre-generation.
@@ -145,6 +147,7 @@ Sources/
       CoverImageView.swift      Asynchronous image loading, caching, and cover art styling.
     TTS/
       ModelDownloadView.swift   Interactive download progress overlay for voice engine models.
+      WelcomeModelDownloadView.swift Onboarding screen to configure Supertonic vs. Apple native voice engine.
   PrivacyInfo.xcprivacy         App Store mandatory privacy manifest recording system API footprint.
 
 Tests/                          Automated unit-testing suite.
@@ -158,31 +161,33 @@ Tests/                          Automated unit-testing suite.
 
 ## Voices & Languages
 
-### Style Profiles
+### Localized Style Profiles
 
-| ID | Name | Gender | Role |
+The application includes 10 core style profiles (5 male, 5 female), which are fully localized and mapped to culturally-appropriate names across all 8 supported languages:
+
+| ID | Base Name | Gender | Localized Profiles (Examples) |
 |---|---|---|---|
-| **M1** | Marcus | Male | Default Voice / Fallback |
-| **M2** | Nathan | Male | Modern Conversational |
-| **M3** | Oliver | Male | Deep Narrative |
-| **M4** | Paul | Male | Editorial / Formal |
-| **M5** | Ryan | Male | Bright / Dynamic |
-| **F1** | Alice | Female | Warm Narrative |
-| **F2** | Beth | Female | Soft Conversational |
-| **F3** | Claire | Female | Clear / Present |
-| **F4** | Diana | Female | Rich / Storyteller |
-| **F5** | Eve | Female | Cinematic / Melodious |
+| **M1** | Marcus | Male | Mateo (ES), Gabriel (FR), Maximilian (DE), Leonardo (IT), Miguel (PT), Hiroto (JA), Minjun (KO) |
+| **M2** | Nathan | Male | Santiago (ES), Lucas (FR), Lukas (DE), Francesco (IT), Arthur (PT), Ren (JA), Seojun (KO) |
+| **M3** | Oliver | Male | Alejandro (ES), Arthur (FR), Jonas (DE), Alessandro (IT), Heitor (PT), Yuto (JA), Doyun (KO) |
+| **M4** | Paul | Male | Sebastián (ES), Louis (FR), Finn (DE), Lorenzo (IT), Bernardo (PT), Minato (JA), Yujun (KO) |
+| **M5** | Ryan | Male | Javier (ES), Hugo (FR), Elias (DE), Mattia (IT), Davi (PT), Haruto (JA), Eunwoo (KO) |
+| **F1** | Alice | Female | Valentina (ES), Emma (FR), Marie (DE), Sofia (IT), Helena (PT), Himari (JA), Seo-a (KO) |
+| **F2** | Beth | Female | Sofía (ES), Chloé (FR), Sophie (DE), Aurora (IT), Alice (PT), Tsumugi (JA), Ji-an (KO) |
+| **F3** | Claire | Female | Camila (ES), Manon (FR), Charlotte (DE), Giulia (IT), Laura (PT), Aoi (JA), Hayoon (KO) |
+| **F4** | Diana | Female | Isabella (ES), Léa (FR), Emilia (DE), Ginevra (IT), Manuela (PT), Ichika (JA), Seoyoon (KO) |
+| **F5** | Eve | Female | Valeria (ES), Inès (FR), Mia (DE), Beatrice (IT), Isabella (PT), Mei (JA), Jiwoo (KO) |
 
-Voice files are dynamically resolved at runtime with safety fallbacks: if a requested file is absent, the system gracefully resolves to `M1.json` (Marcus) to ensure uninterrupted reading.
+Voice assets are dynamically resolved at runtime with safety fallbacks: if a requested localized voice style file is absent, the system gracefully resolves to `M1-en` (Marcus) to ensure uninterrupted reading.
 
 ### Supported Languages
-English, Korean, Japanese, Arabic, Bulgarian, Czech, Danish, German, Greek, Spanish, Estonian, Finnish, French, Hindi, Croatian, Hungarian, Indonesian, Italian, Lithuanian, Latvian, Dutch, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Swedish, Turkish, Ukrainian, Vietnamese.
+English, Spanish, French, German, Italian, Portuguese, Japanese, and Korean.
 
 ---
 
 ## Unit Testing
 
-J7seven is backed by an automated testing suite to verify structural pipelines.
+J7 Listen is backed by an automated testing suite to verify structural pipelines.
 
 ### Running Tests from terminal:
 ```bash

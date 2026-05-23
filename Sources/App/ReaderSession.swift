@@ -31,6 +31,41 @@ final class ReaderSession: ObservableObject {
     @Published var voice: TTSVoice = .default
     @Published var steps: Int = 4
     @Published var activeWordRange: NSRange? = nil
+    @Published var playbackError: (any Error)? = nil
+
+    var currentChapterDuration: Double {
+        guard currentChapterIndex < document.chapters.count else { return 0.0 }
+        let chapter = document.chapters[currentChapterIndex]
+        let totalChars = chapter.paragraphs.reduce(0) { $0 + $1.utf16.count }
+        return Double(totalChars) / 15.0
+    }
+
+    var currentChapterElapsed: Double {
+        guard currentChapterIndex < document.chapters.count else { return 0.0 }
+        let chapter = document.chapters[currentChapterIndex]
+        let elapsedParagraphs = chapter.paragraphs.prefix(currentParagraphIndex)
+        var elapsedChars = elapsedParagraphs.reduce(0) { $0 + $1.utf16.count }
+        if let activeRange = activeWordRange {
+            elapsedChars += activeRange.location
+        }
+        return Double(elapsedChars) / 15.0
+    }
+
+    private func updateNowPlayingMetadata(isPlayingOverride: Bool? = nil) {
+        let playing = isPlayingOverride ?? (state == .playing)
+        let chapter = currentChapterIndex < document.chapters.count ? document.chapters[currentChapterIndex] : nil
+        let chapterTitle = chapter?.title ?? "Chapter \(currentChapterIndex + 1)"
+        let fullTitle = "\(document.title): \(chapterTitle)"
+        
+        player.updateNowPlaying(
+            isPlaying: playing,
+            title: fullTitle,
+            author: document.author,
+            cover: document.coverImageData,
+            duration: currentChapterDuration,
+            elapsedTime: currentChapterElapsed
+        )
+    }
     
     @Published var sleepTimerOption: SleepTimerOption = .off
     @Published var sleepTimerSecondsRemaining: TimeInterval? = nil
@@ -83,6 +118,8 @@ final class ReaderSession: ObservableObject {
             document.cursor = cursor
             document.lastOpenedAt = Date()
             libraryService.saveDocument(document)
+            
+            self.updateNowPlayingMetadata()
         }
         sched.onFirstAudioReady = { [weak self] in
             self?.isBuffering = false
@@ -91,9 +128,17 @@ final class ReaderSession: ObservableObject {
             guard let self else { return }
             activeWordRange = range
         }
+        sched.onPlaybackError = { [weak self] error in
+            guard let self else { return }
+            self.playbackError = error
+            self.isBuffering = false
+            self.state = .paused
+            self.updateNowPlayingMetadata(isPlayingOverride: false)
+        }
     }
 
     func play() {
+        playbackError = nil
         isBuffering = true
         if state == .paused {
             scheduler.resume(voice: voice)
@@ -101,13 +146,14 @@ final class ReaderSession: ObservableObject {
             scheduler.start(from: document.cursor, in: document, voice: voice)
         }
         state = .playing
-        player.updateNowPlaying(title: document.title, author: document.author, cover: document.coverImageData)
+        updateNowPlayingMetadata(isPlayingOverride: true)
     }
 
     func pause() {
         scheduler.pause()
         state = .paused
         isBuffering = false
+        updateNowPlayingMetadata(isPlayingOverride: false)
     }
 
     func togglePlay() {
@@ -134,6 +180,8 @@ final class ReaderSession: ObservableObject {
         scheduler.advanceTo(cursor: nextCursor, voice: voice)
         currentChapterIndex = nextCursor.chapterIndex
         currentParagraphIndex = nextCursor.paragraphIndex
+        activeWordRange = nil
+        updateNowPlayingMetadata()
     }
 
     func skipPrevParagraph() {
@@ -152,6 +200,8 @@ final class ReaderSession: ObservableObject {
         scheduler.advanceTo(cursor: prevCursor, voice: voice)
         currentChapterIndex = prevCursor.chapterIndex
         currentParagraphIndex = prevCursor.paragraphIndex
+        activeWordRange = nil
+        updateNowPlayingMetadata()
     }
 
     func skip(seconds: Double) {
@@ -214,6 +264,8 @@ final class ReaderSession: ObservableObject {
         scheduler.advanceTo(cursor: newCursor, voice: voice)
         currentChapterIndex = targetChapterIndex
         currentParagraphIndex = targetParagraphIndex
+        activeWordRange = nil
+        updateNowPlayingMetadata()
     }
 
     func jumpToChapter(_ index: Int) {
@@ -223,6 +275,8 @@ final class ReaderSession: ObservableObject {
         scheduler.advanceTo(cursor: newCursor, voice: voice)
         currentChapterIndex = newCursor.chapterIndex
         currentParagraphIndex = newCursor.paragraphIndex
+        activeWordRange = nil
+        updateNowPlayingMetadata()
     }
 
     func jumpToParagraph(_ index: Int) {
@@ -231,6 +285,8 @@ final class ReaderSession: ObservableObject {
         if state == .playing { isBuffering = true }
         scheduler.advanceTo(cursor: newCursor, voice: voice)
         currentParagraphIndex = index
+        activeWordRange = nil
+        updateNowPlayingMetadata()
     }
 
     func setRate(_ rate: Float) {
@@ -255,11 +311,14 @@ final class ReaderSession: ObservableObject {
         setupCallbacks(on: newScheduler)
 
         self.voice = sanitizeVoice(self.voice, for: newScheduler)
+        playbackError = nil
 
         if wasPlaying {
             isBuffering = true
             newScheduler.start(from: document.cursor, in: document, voice: voice)
-            player.updateNowPlaying(title: document.title, author: document.author, cover: document.coverImageData)
+            updateNowPlayingMetadata(isPlayingOverride: true)
+        } else {
+            updateNowPlayingMetadata(isPlayingOverride: false)
         }
     }
 
@@ -340,14 +399,15 @@ final class ReaderSession: ObservableObject {
             return voiceToSanitize
         } else {
             let supertonicVoices = TTSVoice.loadAll()
-            if let matched = supertonicVoices.first(where: { $0.id == voiceToSanitize.id }) {
+            let lookupId = voiceToSanitize.id.contains("-") ? voiceToSanitize.id : "\(voiceToSanitize.id)-en"
+            if let matched = supertonicVoices.first(where: { $0.id == lookupId }) {
                 return matched
             }
             
             // If not matched, try to load default from UserDefaults if it's a Supertonic voice
-            if let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId"),
-               supertonicVoices.contains(where: { $0.id == savedVoiceId }) {
-                if let matched = supertonicVoices.first(where: { $0.id == savedVoiceId }) {
+            if let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId") {
+                let lookupSavedId = savedVoiceId.contains("-") ? savedVoiceId : "\(savedVoiceId)-en"
+                if let matched = supertonicVoices.first(where: { $0.id == lookupSavedId }) {
                     return matched
                 }
             }

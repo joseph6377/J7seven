@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 @preconcurrency import OnnxRuntimeBindings
 
-enum ModelState {
+enum ModelState: Equatable {
     case notDownloaded
     case downloading(progress: Double)
     case loading
@@ -159,8 +159,11 @@ final class SupertonicSynthesizer: Synthesizer {
         }
 
         // 2. Fall back to checking local caches folder
-        let sentinel = modelDirectory.appendingPathComponent("onnx/vocoder.onnx")
-        if FileManager.default.fileExists(atPath: sentinel.path) {
+        let allFilesExist = Self.modelFiles.allSatisfy { file in
+            let path = modelDirectory.appendingPathComponent(file.path).path
+            return FileManager.default.fileExists(atPath: path)
+        }
+        if allFilesExist {
             modelState = .loading
             Task {
                 await self.loadModel()
@@ -248,8 +251,9 @@ final class SupertonicSynthesizer: Synthesizer {
             return AsyncThrowingStream { $0.finish(throwing: NSError(domain: "SupertonicSynthesizer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Model not loaded"])) }
         }
         
+        let baseVoiceId = voice.id.components(separatedBy: "-").first ?? voice.id
         let resolvedVoiceStylePath: String
-        let styleFile = "voice_styles/\(voice.id).json"
+        let styleFile = "voice_styles/\(baseVoiceId).json"
         let resolvedURL = resolvePath(for: styleFile)
             
         // Graceful fallback to default Marcus (M1) if the voice style file does not exist

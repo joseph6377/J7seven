@@ -46,12 +46,12 @@ struct CoverImageView: View {
                     .overlay(
                         VStack(spacing: 8) {
                             Image(systemName: "book.closed")
-                                .font(.system(size: 28, weight: .light))
+                                .font(.j7TitleLarge)
                                 .foregroundStyle(.white.opacity(0.4))
                             
                             if !bookTitle.isEmpty {
                                 Text(bookTitle.prefix(2).uppercased())
-                                    .font(.system(size: 14, weight: .bold, design: .serif))
+                                    .font(.j7SubheadlineSerifBold)
                                     .foregroundStyle(.white.opacity(0.65))
                                     .tracking(2)
                             }

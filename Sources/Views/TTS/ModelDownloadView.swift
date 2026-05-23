@@ -9,14 +9,14 @@ struct ModelDownloadView: View {
     var body: some View {
         VStack(spacing: 28) {
             Image(systemName: "arrow.down.circle")
-                .font(.system(size: 60))
+                .font(.j7Hero)
                 .foregroundStyle(.tint)
 
             VStack(spacing: 8) {
                 Text("One-Time Setup")
-                    .font(.title2.bold())
+                    .font(.j7Title2)
                 Text("Downloading the on-device voice model (~350 MB).\nThis only happens once.")
-                    .font(.subheadline)
+                    .font(.j7Subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -28,11 +28,12 @@ struct ModelDownloadView: View {
                     onQuickStart()
                     dismiss()
                 }
-                .font(.subheadline)
+                .font(.j7Subheadline)
                 .foregroundStyle(.secondary)
             }
 
             Button("Cancel") { dismiss() }
+                .font(.j7Subheadline)
                 .foregroundStyle(.secondary)
         }
         .padding(36)
@@ -48,7 +49,7 @@ struct ModelDownloadView: View {
                     .tint(.accentColor)
                     .frame(maxWidth: 280)
                 Text("\(Int(p * 100))%")
-                    .font(.caption)
+                    .font(.j7Caption)
                     .foregroundStyle(.secondary)
             }
         case .loading:
@@ -64,7 +65,7 @@ struct ModelDownloadView: View {
             VStack(spacing: 12) {
                 Label("Download failed", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
-                Text(msg).font(.caption).foregroundStyle(.secondary)
+                Text(msg).font(.j7Caption).foregroundStyle(.secondary)
                 Button("Retry") { Task { try? await synthesizer.downloadModel() } }
                     .buttonStyle(.borderedProminent)
             }

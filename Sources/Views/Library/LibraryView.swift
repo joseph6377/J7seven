@@ -21,6 +21,10 @@ struct LibraryView: View {
     @State private var pendingImportURL: URL?
     @State private var importErrorMessage = ""
     @State private var showImportError = false
+    @State private var showAboutSheet = false
+    @State private var showWelcomeDownload = false
+    @State private var showVoices = false
+    @State private var showOnboardingCarousel = false
 
     // Computed list of books filtered by search query
     private var filteredBooks: [LibraryEntry] {
@@ -62,11 +66,11 @@ struct LibraryView: View {
                             } label: {
                                 HStack(spacing: 6) {
                                     Text("⚡️")
-                                        .font(.caption)
-                                    Text("4.8h read")
-                                        .font(.system(size: 11, weight: .bold))
+                                        .font(.j7Caption)
+                                    Text(appState.formattedTotalHoursRead)
+                                        .font(.j7CaptionBold)
                                     Image(systemName: "chevron.down")
-                                        .font(.system(size: 9, weight: .bold))
+                                        .font(.j7Caption2Bold)
                                         .rotationEffect(.degrees(showStats ? 180 : 0))
                                 }
                                 .padding(.horizontal, 12)
@@ -123,16 +127,35 @@ struct LibraryView: View {
         .onAppear {
             appState.refresh()
             loadFavorites()
+            
+            // Check if user has seen welcome download prompt and model is not downloaded
+            let hasSeenWelcome = UserDefaults.standard.bool(forKey: "hasSeenWelcomeDownloadPrompt")
+            if !hasSeenWelcome {
+                if case .notDownloaded = appState.supertonicSynthesizer.modelState {
+                    showWelcomeDownload = true
+                }
+            } else {
+                let hasSeenShowcase = UserDefaults.standard.bool(forKey: "library.onboarding.showcased")
+                if !hasSeenShowcase {
+                    showOnboardingCarousel = true
+                }
+            }
         }
         .navigationTitle("Library")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Image("AppLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showAboutSheet = true
+                } label: {
+                    Image("AppLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 34)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
             ToolbarItem(placement: .primaryAction) {
                 toolbarActions
@@ -173,6 +196,45 @@ struct LibraryView: View {
         } message: {
             Text(importErrorMessage)
         }
+        .sheet(isPresented: $showAboutSheet) {
+            AboutView()
+                .presentationDetents([.medium])
+                .preferredColorScheme(appState.selectedAppearance.colorScheme)
+        }
+        .sheet(isPresented: $showWelcomeDownload) {
+            WelcomeModelDownloadView(
+                synthesizer: appState.supertonicSynthesizer,
+                onReady: {
+                    appState.selectedEngine = .supertonic
+                    UserDefaults.standard.set(true, forKey: "hasSeenWelcomeDownloadPrompt")
+                },
+                onUseApple: {
+                    appState.selectedEngine = .apple
+                    if let firstApple = appState.appleVoiceScheduler.cachedVoices.first {
+                        UserDefaults.standard.set(firstApple.id, forKey: "tts.defaultVoiceId")
+                    }
+                    UserDefaults.standard.set(true, forKey: "hasSeenWelcomeDownloadPrompt")
+                }
+            )
+            .interactiveDismissDisabled()
+            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+        }
+        .sheet(isPresented: $showVoices) {
+            VoicesView(isLocked: false)
+                .preferredColorScheme(appState.selectedAppearance.colorScheme)
+        }
+        .onChange(of: showWelcomeDownload) { _, newValue in
+            if !newValue {
+                let hasSeenShowcase = UserDefaults.standard.bool(forKey: "library.onboarding.showcased")
+                if !hasSeenShowcase {
+                    showOnboardingCarousel = true
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showOnboardingCarousel) {
+            OnboardingCarouselView(isPresented: $showOnboardingCarousel)
+                .preferredColorScheme(appState.selectedAppearance.colorScheme)
+        }
     }
 
     // MARK: - Subviews
@@ -181,11 +243,11 @@ struct LibraryView: View {
         HStack(spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.j7SubheadlineSemibold)
                     .foregroundStyle(.secondary)
                 
                 TextField("Search audiobooks...", text: $searchText)
-                    .font(.subheadline)
+                    .font(.j7Subheadline)
                     .textFieldStyle(.plain)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -195,7 +257,7 @@ struct LibraryView: View {
                         searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14))
+                            .font(.j7Body)
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
@@ -211,7 +273,7 @@ struct LibraryView: View {
                     searchText = ""
                 }
             }
-            .font(.subheadline.bold())
+            .font(.j7SubheadlineBold)
             .foregroundStyle(Color.primary)
             .buttonStyle(.plain)
         }
@@ -225,19 +287,19 @@ struct LibraryView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Good evening, Joseph")
-                        .font(.system(.title3, design: .serif).bold())
+                        .font(.j7Title3Serif)
                         .foregroundStyle(.primary)
                     Text("Welcome to your sanctuary.")
-                        .font(.caption)
+                        .font(.j7Caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 
                 HStack(spacing: 4) {
                     Image(systemName: "timer")
-                        .font(.caption)
-                    Text("4.8h read")
-                        .font(.caption.bold())
+                        .font(.j7Caption)
+                    Text(appState.formattedTotalHoursRead)
+                        .font(.j7CaptionBold)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -248,9 +310,9 @@ struct LibraryView: View {
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(appState.books.count)")
-                        .font(.title2.bold())
+                        .font(.j7Title2)
                     Text("Books on shelf")
-                        .font(.caption)
+                        .font(.j7Caption)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -260,9 +322,9 @@ struct LibraryView: View {
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("100% Offline")
-                        .font(.title2.bold())
+                        .font(.j7Title2)
                     Text("On-device AI")
-                        .font(.caption)
+                        .font(.j7Caption)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -282,6 +344,8 @@ struct LibraryView: View {
         .padding(.vertical, 10)
     }
 
+
+
     private var filterChipsSection: some View {
         HStack(spacing: 0) {
             ForEach(LibraryFilter.allCases, id: \.self) { filter in
@@ -292,7 +356,7 @@ struct LibraryView: View {
                     }
                 } label: {
                     Text(filter.rawValue)
-                        .font(.system(size: 13, weight: .bold, design: .serif))
+                        .font(.j7SubheadlineSerifBold)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
                         .background(
@@ -324,10 +388,22 @@ struct LibraryView: View {
                 }
             } label: {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.j7SubheadlineBold)
                     .foregroundStyle(Color.primary)
                     .frame(width: 32, height: 32)
                     .background(isSearchActive ? Color.primary.opacity(0.12) : Color.primary.opacity(0.05), in: Circle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                showVoices = true
+            } label: {
+                Image(systemName: "waveform")
+                    .font(.j7SubheadlineBold)
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.primary.opacity(0.05), in: Circle())
             }
             .buttonStyle(.plain)
 
@@ -340,7 +416,7 @@ struct LibraryView: View {
                 }
             } label: {
                 Image(systemName: appState.selectedAppearance.iconName)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.j7SubheadlineBold)
                     .foregroundStyle(Color.primary)
                     .frame(width: 32, height: 32)
                     .background(Color.primary.opacity(0.05), in: Circle())
@@ -348,38 +424,26 @@ struct LibraryView: View {
             }
             .buttonStyle(.plain)
 
-            Menu {
-                Section("Speech Engine") {
-                    Picker("Engine", selection: Bindable(appState).selectedEngine) {
-                        ForEach(TTSEngine.allCases) { engine in
-                            Text(engine.displayName)
-                                .tag(engine)
-                        }
-                    }
+            if case .notDownloaded = appState.supertonicSynthesizer.modelState {
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showModelDownload = true
+                } label: {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.j7SubheadlineBold)
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 32, height: 32)
+                        .background(Color.primary.opacity(0.05), in: Circle())
                 }
-
-                if case .notDownloaded = appState.supertonicSynthesizer.modelState {
-                    Button {
-                        showModelDownload = true
-                    } label: {
-                        Label("Download Supertonic Model", systemImage: "arrow.down.circle")
-                    }
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Color.primary)
-                    .frame(width: 32, height: 32)
-                    .background(Color.primary.opacity(0.05), in: Circle())
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
     private var shelfHeader: some View {
         HStack {
             Text(selectedFilter.rawValue)
-                .font(.system(.subheadline, design: .serif).bold())
+                .font(.j7SubheadlineSerifBold)
                 .foregroundStyle(.primary)
             Spacer()
             
@@ -389,7 +453,7 @@ struct LibraryView: View {
                 }
             } label: {
                 Image(systemName: isGridView ? "list.bullet" : "square.grid.2x2")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.j7SubheadlineBold)
                     .foregroundStyle(.secondary)
                     .frame(width: 32, height: 32)
                     .background(Color.primary.opacity(0.04), in: Circle())
@@ -431,14 +495,14 @@ struct LibraryView: View {
                         
                         VStack(spacing: 4) {
                             Text(entry.title)
-                                .font(.system(size: 14, weight: .bold, design: .serif))
+                                .font(.j7BodySerifBold)
                                 .lineLimit(1)
                                 .multilineTextAlignment(.center)
                                 .foregroundStyle(.primary)
                             
                             if let author = entry.author {
                                 Text(author)
-                                    .font(.system(size: 11))
+                                    .font(.j7Caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
@@ -535,17 +599,17 @@ struct LibraryView: View {
                     .fill(Color.accentColor.opacity(0.05))
                     .frame(width: 190, height: 190)
                 Image(systemName: "book.closed")
-                    .font(.system(size: 56, weight: .light))
+                    .font(.j7Hero)
                     .foregroundStyle(Color.accentColor.opacity(0.7))
             }
             .padding(.bottom, 28)
 
             Text("Your Library is Empty")
-                .font(.system(.title3, design: .serif).bold())
+                .font(.j7Title3Serif)
                 .padding(.bottom, 8)
 
             Text("Import an EPUB to start reading aloud.")
-                .font(.subheadline)
+                .font(.j7Subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
@@ -561,16 +625,16 @@ struct LibraryView: View {
             Spacer()
 
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 56, weight: .light))
+                .font(.j7Hero)
                 .foregroundStyle(.secondary.opacity(0.7))
                 .padding(.bottom, 20)
 
             Text("No Results Found")
-                .font(.system(.title3, design: .serif).bold())
+                .font(.j7Title3Serif)
                 .padding(.bottom, 8)
 
             Text("We couldn't find any audiobooks matching \"\(searchText)\".")
-                .font(.subheadline)
+                .font(.j7Subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
@@ -594,17 +658,17 @@ struct LibraryView: View {
                     .fill(Color.accentColor.opacity(0.05))
                     .frame(width: 190, height: 190)
                 Image(systemName: "star")
-                    .font(.system(size: 56, weight: .light))
+                    .font(.j7Hero)
                     .foregroundStyle(Color.accentColor.opacity(0.7))
             }
             .padding(.bottom, 28)
 
             Text("No Favorites Yet")
-                .font(.system(.title3, design: .serif).bold())
+                .font(.j7Title3Serif)
                 .padding(.bottom, 8)
 
             Text("Star your favorite books in the menu to access them quickly.")
-                .font(.subheadline)
+                .font(.j7Subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
@@ -622,7 +686,7 @@ struct LibraryView: View {
             showFilePicker = true
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 22, weight: .semibold))
+                .font(.j7Title2)
                 .foregroundStyle(.white)
                 .frame(width: 56, height: 56)
                 .background(
@@ -685,13 +749,13 @@ private struct BookRowCell: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let author = entry.author {
                     Text(author)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.j7CaptionMedium)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
                 Text(entry.title)
-                    .font(.system(size: 15, weight: .bold, design: .serif))
+                    .font(.j7BodySerifBold)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -713,7 +777,7 @@ private struct BookRowCell: View {
                     }
                     
                     Text("\(progressPercent)% • \(entry.estimatedTimeLeft)")
-                        .font(.system(size: 12))
+                        .font(.j7Caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -721,5 +785,286 @@ private struct BookRowCell: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Onboarding Walkthrough Carousel
+
+struct OnboardingCarouselView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Binding var isPresented: Bool
+    @State private var selection = 0
+    
+    private var backgroundColor: Color {
+        if colorScheme == .light {
+            return Color(red: 0.98, green: 0.97, blue: 0.95)
+        } else {
+            return Color(red: 0.05, green: 0.05, blue: 0.05)
+        }
+    }
+    
+    var body: some View {
+        ZStack {
+            // Immersive clean background
+            backgroundColor
+                .ignoresSafeArea()
+            
+            // Subtle ambient backdrop glow
+            VStack {
+                Spacer()
+                Circle()
+                    .fill(Color.accentColor.opacity(0.03))
+                    .frame(width: 350, height: 350)
+                    .blur(radius: 80)
+                    .offset(y: 100)
+            }
+            .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Header Bar with Skip Option
+                HStack {
+                    Spacer()
+                    if selection < 2 {
+                        Button("Skip Intro") {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            dismiss()
+                        }
+                        .font(.j7CaptionBold)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .transition(.opacity)
+                    }
+                }
+                .padding(.top, 16)
+                .frame(height: 50)
+                
+                // Swipable Carousel Content
+                TabView(selection: $selection) {
+                    // Slide 1: Welcome to the Sanctuary
+                    carouselSlide(
+                        tag: 0,
+                        illustration: welcomeIllustration,
+                        title: "J7 Listen",
+                        subtitle: "Your Private Audiobook Sanctuary",
+                        bodyText: "Welcome to a 100% offline, on-device reading experience. Let's take a quick 10-second tour of your library."
+                    )
+                    
+                    // Slide 2: Import EPUBs
+                    carouselSlide(
+                        tag: 1,
+                        illustration: importIllustration,
+                        title: "Import Your Books",
+                        subtitle: "DRM-Free Ebooks Ready For Speech",
+                        bodyText: "Tap the floating blue '+' button in the bottom right corner of your library to import any DRM-free EPUB directly from your files."
+                    )
+                    
+                    // Slide 3: Personalize Voices
+                    carouselSlide(
+                        tag: 2,
+                        illustration: voicesIllustration,
+                        title: "Premium Voices",
+                        subtitle: "Studio Narrators Across 8 Languages",
+                        bodyText: "Tap the waveform icon in the navigation bar to preview and download premium multi-lingual offline voices."
+                    )
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                
+                // Bottom Control Section
+                VStack(spacing: 20) {
+                    // Page Indicator Dots
+                    HStack(spacing: 8) {
+                        ForEach(0..<3) { idx in
+                            Circle()
+                                .fill(selection == idx ? Color.accentColor : Color.primary.opacity(0.12))
+                                .frame(width: selection == idx ? 16 : 8, height: 8)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selection)
+                        }
+                    }
+                    
+                    // Action Button
+                    Button {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        if selection < 2 {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                selection += 1
+                            }
+                        } else {
+                            dismiss()
+                        }
+                    } label: {
+                        Text(selection == 2 ? "Enter Sanctuary" : "Next")
+                            .font(.j7SubheadlineBold)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(
+                                Capsule()
+                                    .fill(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            )
+                            .shadow(color: Color.accentColor.opacity(0.2), radius: 6, x: 0, y: 3)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 36)
+            }
+        }
+    }
+    
+    private func dismiss() {
+        UserDefaults.standard.set(true, forKey: "library.onboarding.showcased")
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            isPresented = false
+        }
+    }
+    
+    @ViewBuilder
+    private func carouselSlide(
+        tag: Int,
+        illustration: some View,
+        title: String,
+        subtitle: String,
+        bodyText: String
+    ) -> some View {
+        VStack(spacing: 32) {
+            Spacer()
+            
+            // Mock illustration container
+            illustration
+            
+            VStack(spacing: 12) {
+                Text(title)
+                    .font(.j7Title1Serif)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                
+                Text(subtitle)
+                    .font(.j7SubheadlineSerifBold)
+                    .foregroundStyle(Color.accentColor)
+                    .multilineTextAlignment(.center)
+                
+                Text(bodyText)
+                    .font(.j7Body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    .padding(.horizontal, 24)
+            }
+            
+            Spacer()
+        }
+        .tag(tag)
+    }
+    
+    // MARK: - Slide Mock Illustrations
+    
+    private var welcomeIllustration: some View {
+        ZStack {
+            Circle()
+                .stroke(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
+                .frame(width: 150, height: 150)
+            
+            Circle()
+                .fill(Color.accentColor.opacity(0.04))
+                .frame(width: 120, height: 120)
+                .overlay(
+                    Circle()
+                        .stroke(Color.accentColor.opacity(0.15), lineWidth: 0.5)
+                )
+            
+            Image(systemName: "headphones")
+                .font(.system(size: 48, weight: .thin))
+                .foregroundStyle(Color.accentColor)
+        }
+        .frame(height: 180)
+    }
+    
+    private var importIllustration: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.primary.opacity(0.02))
+                .frame(width: 95, height: 135)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+                .overlay(
+                    VStack(spacing: 8) {
+                        Image(systemName: "book.closed")
+                            .font(.system(size: 30, weight: .light))
+                            .foregroundStyle(.secondary)
+                        
+                        VStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.secondary.opacity(0.3))
+                                .frame(width: 55, height: 4)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.secondary.opacity(0.2))
+                                .frame(width: 40, height: 4)
+                        }
+                    }
+                )
+                .rotationEffect(.degrees(-10))
+                .offset(x: -24, y: -10)
+            
+            Circle()
+                .fill(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 56, height: 56)
+                .shadow(color: Color.accentColor.opacity(0.3), radius: 6, x: 0, y: 3)
+                .overlay(
+                    Image(systemName: "plus")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white)
+                )
+                .offset(x: 34, y: 24)
+        }
+        .frame(height: 180)
+    }
+    
+    private var voicesIllustration: some View {
+        ZStack {
+            HStack(spacing: 5) {
+                ForEach(0..<8) { idx in
+                    let heights: [CGFloat] = [20, 45, 65, 30, 75, 50, 35, 15]
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(Color.accentColor.opacity(0.12))
+                        .frame(width: 3.5, height: heights[idx % heights.count])
+                }
+            }
+            .scaleEffect(1.3)
+            
+            VStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    Text("Sofia (ES)")
+                        .font(.j7CaptionBold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay(Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.03), radius: 3)
+                        .offset(x: -15)
+                    
+                    Text("Arthur (FR)")
+                        .font(.j7CaptionBold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.accentColor.opacity(0.08), in: Capsule())
+                        .foregroundStyle(Color.accentColor)
+                        .overlay(Capsule().stroke(Color.accentColor.opacity(0.2), lineWidth: 0.5))
+                        .offset(x: 10, y: -5)
+                }
+                
+                Text("Hiro (JA)")
+                    .font(.j7CaptionBold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.03), radius: 3)
+                    .offset(x: -25)
+            }
+        }
+        .frame(height: 180)
     }
 }

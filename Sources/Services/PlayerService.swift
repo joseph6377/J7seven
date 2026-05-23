@@ -14,8 +14,11 @@ final class PlayerService {
 
     private let nowPlayingQueue = DispatchQueue(label: "in.josepht.BooksApp.NowPlaying")
 
-    var onRemotePlay:  (@MainActor () -> Void)?
-    var onRemotePause: (@MainActor () -> Void)?
+    var onRemotePlay:                   (@MainActor () -> Void)?
+    var onRemotePause:                  (@MainActor () -> Void)?
+    var onRemoteSkipForward:            (@MainActor (Double) -> Void)?
+    var onRemoteSkipBackward:           (@MainActor (Double) -> Void)?
+    var onRemoteChangePlaybackPosition: (@MainActor (Double) -> Void)?
 
     init() {
         setupEngine()
@@ -124,10 +127,46 @@ final class PlayerService {
             }
             return .success
         }
+
+        c.skipForwardCommand.preferredIntervals = [15]
+        c.skipForwardCommand.addTarget { [weak self] event in
+            guard let skipEvent = event as? MPSkipIntervalCommandEvent else { return .commandFailed }
+            let interval = skipEvent.interval
+            Task { @MainActor in
+                self?.onRemoteSkipForward?(interval)
+            }
+            return .success
+        }
+
+        c.skipBackwardCommand.preferredIntervals = [15]
+        c.skipBackwardCommand.addTarget { [weak self] event in
+            guard let skipEvent = event as? MPSkipIntervalCommandEvent else { return .commandFailed }
+            let interval = skipEvent.interval
+            Task { @MainActor in
+                self?.onRemoteSkipBackward?(interval)
+            }
+            return .success
+        }
+
+        c.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            let position = positionEvent.positionTime
+            Task { @MainActor in
+                self?.onRemoteChangePlaybackPosition?(position)
+            }
+            return .success
+        }
     }
 
-    func updateNowPlaying(title: String? = nil, author: String? = nil, cover: Data? = nil) {
-        let isPlaying = self.isPlaying
+    func updateNowPlaying(
+        isPlaying: Bool? = nil,
+        title: String? = nil,
+        author: String? = nil,
+        cover: Data? = nil,
+        duration: Double? = nil,
+        elapsedTime: Double? = nil
+    ) {
+        let playing = isPlaying ?? self.isPlaying
         let rate = self.playbackRate
         
         nowPlayingQueue.async {
@@ -137,8 +176,16 @@ final class PlayerService {
             if let cover, let image = UIImage(data: cover) {
                 info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             }
-            info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? Double(rate) : 0
+            if let duration {
+                info[MPMediaItemPropertyPlaybackDuration] = duration
+            }
+            if let elapsedTime {
+                info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsedTime
+            }
+            info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? Double(rate) : 0
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            
+            MPNowPlayingInfoCenter.default().playbackState = playing ? .playing : .paused
         }
     }
 }

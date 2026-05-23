@@ -9,13 +9,25 @@ struct AudioPlayerView: View {
     @State private var showSettings = false
     @State private var showChapters = false
     @State private var showMoreOptions = false
-    @State private var isDeckExpanded = false
-    @State private var dragOffset: CGFloat = 0
+    @State private var showVoices = false
+    @State private var isMuted = false
     @State private var isParagraphScrolledAway = false
 
     // Inactivity Auto-Hide controls state
     @State private var areControlsVisible = true
     @State private var autoHideWorkItem: DispatchWorkItem? = nil
+
+    // Playback Error and Repair states
+    @State private var showRepairSheet = false
+    @State private var showErrorAlert = false
+    @State private var activeError: (any Error)? = nil
+
+    // Auto-scroll tracking state
+    @State private var lastScrolledParagraphIndex: Int? = nil
+    @State private var lastScrolledSentenceRange: NSRange? = nil
+    @State private var lastScrolledProgress: Double = 0.0
+    @State private var activeParagraphRect: CGRect = .zero
+    @State private var lastScrollTime = Date.distantPast
 
     private var themeBackgroundColor: Color {
         if colorScheme == .dark {
@@ -46,13 +58,13 @@ struct AudioPlayerView: View {
                 // The Editorial Serif Reader Canvas (Full Screen)
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 18) {
-                        Spacer().frame(height: 12) // Perfect editorial micro cushion before title
+                        Spacer().frame(height: geometry.safeAreaInsets.top + (areControlsVisible ? 76 : 24))
 
                         let chapter = session.document.chapters[session.currentChapterIndex]
                         
                         // Chapter Title Header in Georgia Serif
                         Text(chapter.title)
-                            .font(.system(size: 26, weight: .bold, design: .serif))
+                            .font(.j7Title1Serif)
                             .padding(.horizontal, 24)
                             .padding(.top, 10)
                             .padding(.bottom, 16)
@@ -66,10 +78,18 @@ struct AudioPlayerView: View {
                                 .id(pIdx)
                         }
                     }
-                    .padding(.bottom, 30) // Balanced editorial bottom paragraph cushion
+                    .padding(.bottom, 220) // Sizable cushion to easily scroll past the new floating player panel!
                 }
-                .padding(.top, areControlsVisible ? geometry.safeAreaInsets.top + 70 : geometry.safeAreaInsets.top + 20)
-                .padding(.bottom, areControlsVisible ? 0 : 20)
+                .ignoresSafeArea(edges: .all)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 5).onChanged { _ in
+                        if !isParagraphScrolledAway {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                isParagraphScrolledAway = true
+                            }
+                        }
+                    }
+                )
                 .onTapGesture {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         areControlsVisible.toggle()
@@ -85,7 +105,32 @@ struct AudioPlayerView: View {
                     showSettings = true
                 }
                 .onAppear {
-                    scrollProxy.scrollTo(session.currentParagraphIndex, anchor: .center)
+                    let currentParaIdx = session.currentParagraphIndex
+                    let chapters = session.document.chapters
+                    let progress: Double
+                    if session.currentChapterIndex < chapters.count {
+                        let chapter = chapters[session.currentChapterIndex]
+                        if currentParaIdx < chapter.paragraphs.count {
+                            let para = chapter.paragraphs[currentParaIdx]
+                            if let range = session.activeWordRange, para.count > 0 {
+                                progress = Double(range.location) / Double(para.count)
+                            } else {
+                                progress = 0.0
+                            }
+                        } else {
+                            progress = 0.0
+                        }
+                    } else {
+                        progress = 0.0
+                    }
+                    
+                    lastScrolledParagraphIndex = currentParaIdx
+                    lastScrolledSentenceRange = nil
+                    lastScrolledProgress = progress
+                    lastScrollTime = Date()
+                    
+                    scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: progress))
+                    
                     if session.state == .playing {
                         resetAutoHideTimer()
                     }
@@ -94,12 +139,27 @@ struct AudioPlayerView: View {
                     cancelAutoHideTimer()
                 }
                 .onChange(of: session.currentParagraphIndex) { _, newIdx in
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        scrollProxy.scrollTo(newIdx, anchor: .center)
-                    }
                     if areControlsVisible {
                         resetAutoHideTimer()
                     }
+                    
+                    // As decided: if user manually scrolled away, do NOT snap back!
+                    guard !isParagraphScrolledAway else { return }
+                    
+                    lastScrolledParagraphIndex = newIdx
+                    lastScrolledSentenceRange = nil
+                    lastScrolledProgress = 0.0
+                    lastScrollTime = Date()
+                    
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                        scrollProxy.scrollTo(newIdx, anchor: .center)
+                    }
+                }
+                .onChange(of: session.activeWordRange) { _, _ in
+                    checkAndCenterHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
+                }
+                .onChange(of: activeParagraphRect) { _, _ in
+                    checkAndCenterHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
                 }
                 .onChange(of: session.state) { _, newState in
                     if newState == .playing {
@@ -111,6 +171,28 @@ struct AudioPlayerView: View {
                         }
                     }
                 }
+                .onChange(of: session.playbackError != nil) { _, hasError in
+                    if hasError, let error = session.playbackError {
+                        let desc = error.localizedDescription
+                        if desc.contains("Model not loaded") || desc.contains("Model file missing") {
+                            showRepairSheet = true
+                        } else {
+                            activeError = error
+                            showErrorAlert = true
+                        }
+                    }
+                }
+
+                // Top status-bar gradient overlay to fade text under battery/time section
+                LinearGradient(
+                    colors: [themeBackgroundColor, themeBackgroundColor.opacity(0.0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: geometry.safeAreaInsets.top + 24)
+                .ignoresSafeArea(edges: .top)
+                .opacity(areControlsVisible ? 0.0 : 1.0)
+                .allowsHitTesting(false)
 
                 // Floating translucent frosted Header at the top
                 header(scrollProxy: scrollProxy, safeAreaTop: geometry.safeAreaInsets.top)
@@ -124,9 +206,9 @@ struct AudioPlayerView: View {
                         
                         HStack(spacing: 6) {
                             Image(systemName: "location.fill")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.j7Caption2Bold)
                             Text("Sync Highlight")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.j7CaptionBold)
                         }
                         .foregroundStyle(Color.accentColor)
                         .padding(.horizontal, 14)
@@ -140,8 +222,33 @@ struct AudioPlayerView: View {
                         .contentShape(Capsule())
                         .onTapGesture {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                scrollProxy.scrollTo(session.currentParagraphIndex, anchor: .center)
+                            let currentParaIdx = session.currentParagraphIndex
+                            let chapters = session.document.chapters
+                            let progress: Double
+                            if session.currentChapterIndex < chapters.count {
+                                let chapter = chapters[session.currentChapterIndex]
+                                if currentParaIdx < chapter.paragraphs.count {
+                                    let para = chapter.paragraphs[currentParaIdx]
+                                    if let range = session.activeWordRange, para.count > 0 {
+                                        progress = Double(range.location) / Double(para.count)
+                                    } else {
+                                        progress = 0.0
+                                    }
+                                } else {
+                                    progress = 0.0
+                                }
+                            } else {
+                                progress = 0.0
+                            }
+                            
+                            isParagraphScrolledAway = false
+                            lastScrolledParagraphIndex = currentParaIdx
+                            lastScrolledSentenceRange = nil
+                            lastScrolledProgress = progress
+                            lastScrollTime = Date()
+                            
+                            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                                scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: progress))
                             }
                         }
                     }
@@ -152,26 +259,23 @@ struct AudioPlayerView: View {
                         removal: .opacity
                     ))
                 }
+
+                if areControlsVisible {
+                    VStack {
+                        Spacer()
+                        floatingPlayerPanel
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, geometry.safeAreaInsets.bottom + 12)
+                    }
+                    .ignoresSafeArea(edges: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(edges: .top)
             .onPreferenceChange(ActiveParagraphFramePreferenceKey.self) { rect in
                 guard rect != .zero else { return }
-                let screenHeight = geometry.size.height
-                let safeAreaTop = geometry.safeAreaInsets.top
-                let safeAreaBottom = geometry.safeAreaInsets.bottom
-                
-                let isOffScreen = rect.maxY < (safeAreaTop + 60) || rect.minY > (screenHeight - safeAreaBottom - 60)
-                
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    self.isParagraphScrolledAway = isOffScreen
-                }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if areControlsVisible {
-                    slidingPlayerDeck
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+                self.activeParagraphRect = rect
             }
             .sheet(isPresented: $showSettings) {
                 SettingsSheet(session: session)
@@ -181,10 +285,31 @@ struct AudioPlayerView: View {
                 AudioChapterPickerView(session: session)
                     .preferredColorScheme(appState.selectedAppearance.colorScheme)
             }
+            .sheet(isPresented: $showVoices) {
+                VoicesView(isLocked: true)
+                    .environment(appState)
+                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            }
             .sheet(isPresented: $showMoreOptions) {
                 MoreOptionsSheet(session: session)
                     .environment(appState)
                     .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            }
+            .sheet(isPresented: $showRepairSheet, onDismiss: {
+                session.playbackError = nil
+            }) {
+                ModelDownloadView(synthesizer: appState.supertonicSynthesizer) {
+                    appState.selectedEngine = .supertonic
+                    session.switchToScheduler(appState.synthScheduler, voices: TTSVoice.loadAll())
+                }
+                .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            }
+            .alert("Playback Error", isPresented: $showErrorAlert, presenting: activeError) { _ in
+                Button("OK", role: .cancel) {
+                    session.playbackError = nil
+                }
+            } message: { error in
+                Text(error.localizedDescription)
             }
             .statusBarHidden(!areControlsVisible)
         }
@@ -196,7 +321,7 @@ struct AudioPlayerView: View {
         if isCurrent {
             let attributed = makeAttributedParagraph(para)
             Text(attributed)
-                .font(.system(size: 18, weight: .medium, design: .serif))
+                .font(.j7BookContent(size: appState.fontSize, weight: .medium))
                 .foregroundStyle(Color.primary)
                 .lineSpacing(6)
                 .padding(.horizontal, 24)
@@ -228,7 +353,7 @@ struct AudioPlayerView: View {
                 }
         } else {
             Text(para)
-                .font(.system(size: 18, weight: .regular, design: .serif))
+                .font(.j7BookContent(size: appState.fontSize))
                 .foregroundStyle(Color.primary.opacity(0.75))
                 .lineSpacing(6)
                 .padding(.horizontal, 24)
@@ -249,6 +374,61 @@ struct AudioPlayerView: View {
                     showSettings = true
                 }
         }
+    }
+
+    private func checkAndCenterHighlight(scrollProxy: ScrollViewProxy, screenHeight: CGFloat) {
+        guard !isParagraphScrolledAway, session.state == .playing else { return }
+        
+        // Cooldown check to prevent animation feedback loop (e.g. 0.8 seconds between programmatic scrolls)
+        let now = Date()
+        guard now.timeIntervalSince(lastScrollTime) > 0.8 else { return }
+        
+        let currentParaIdx = session.currentParagraphIndex
+        let chapters = session.document.chapters
+        guard session.currentChapterIndex < chapters.count else { return }
+        let chapter = chapters[session.currentChapterIndex]
+        guard currentParaIdx < chapter.paragraphs.count else { return }
+        let para = chapter.paragraphs[currentParaIdx]
+        
+        let progress: Double
+        if let range = session.activeWordRange, para.count > 0 {
+            progress = Double(range.location) / Double(para.count)
+        } else {
+            progress = 0.0
+        }
+        
+        guard screenHeight > 0, activeParagraphRect != .zero else { return }
+        
+        let highlightY = activeParagraphRect.minY + (activeParagraphRect.height * progress)
+        let relativeY = highlightY / screenHeight
+        
+        // Dynamic edge threshold: Scroll to center ONLY if the active highlighted word is about to move off-screen (outside [0.15, 0.85] band)
+        if relativeY < 0.15 || relativeY > 0.85 {
+            lastScrollTime = now
+            lastScrolledParagraphIndex = currentParaIdx
+            lastScrolledProgress = progress
+            
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: max(0.0, min(1.0, progress))))
+            }
+        }
+    }
+
+    private func activeSentenceRange(in para: String, for wordRange: NSRange?) -> NSRange? {
+        guard let nsRange = wordRange,
+              nsRange.location != NSNotFound,
+              nsRange.location + nsRange.length <= para.utf16.count else {
+            return nil
+        }
+        var activeSentenceRange: NSRange? = nil
+        para.enumerateSubstrings(in: para.startIndex..<para.endIndex, options: .bySentences) { _, sentenceRange, _, stop in
+            let nsSentenceRange = NSRange(sentenceRange, in: para)
+            if nsRange.location >= nsSentenceRange.location && nsRange.location < nsSentenceRange.location + nsSentenceRange.length {
+                activeSentenceRange = nsSentenceRange
+                stop = true
+            }
+        }
+        return activeSentenceRange
     }
 
     private func makeAttributedParagraph(_ para: String) -> AttributedString {
@@ -300,7 +480,7 @@ struct AudioPlayerView: View {
                 dismiss()
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.j7BodyBold)
                     .foregroundStyle(Color.primary)
                     .frame(width: 44, height: 44)
                     .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.04))
@@ -311,19 +491,44 @@ struct AudioPlayerView: View {
             
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    scrollProxy.scrollTo(session.currentParagraphIndex, anchor: .center)
+                let currentParaIdx = session.currentParagraphIndex
+                let chapters = session.document.chapters
+                let progress: Double
+                if session.currentChapterIndex < chapters.count {
+                    let chapter = chapters[session.currentChapterIndex]
+                    if currentParaIdx < chapter.paragraphs.count {
+                        let para = chapter.paragraphs[currentParaIdx]
+                        if let range = session.activeWordRange, para.count > 0 {
+                            progress = Double(range.location) / Double(para.count)
+                        } else {
+                            progress = 0.0
+                        }
+                    } else {
+                        progress = 0.0
+                    }
+                } else {
+                    progress = 0.0
+                }
+                
+                isParagraphScrolledAway = false
+                lastScrolledParagraphIndex = currentParaIdx
+                lastScrolledSentenceRange = nil
+                lastScrolledProgress = progress
+                lastScrollTime = Date()
+                
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                    scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: progress))
                 }
             } label: {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(session.document.title)
-                        .font(.system(size: 13, weight: .bold, design: .serif))
+                        .font(.j7SubheadlineSerifBold)
                         .lineLimit(1)
                         .foregroundStyle(Color.primary)
                     
                     let chapter = session.document.chapters[session.currentChapterIndex]
                     Text("Chapter \(session.currentChapterIndex + 1): \(chapter.title)")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.j7Caption2Bold)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -348,122 +553,215 @@ struct AudioPlayerView: View {
         )
     }
 
-    private var playerDeckBackgroundColor: Color {
-        if colorScheme == .dark {
-            return Color(hex: "151517") // Deep obsidian/gray card background for premium contrast
-        } else {
-            return Color(hex: "FFFFFF") // Pure solid white card background to cover text completely
-        }
-    }
-
-    private var slidingPlayerDeck: some View {
-        VStack(spacing: 0) {
-            // Drag indicator / header bar
-            Capsule()
-                .fill(Color.primary.opacity(0.15))
-                .frame(width: 36, height: 5)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            dragOffset = value.translation.height
-                        }
-                        .onEnded { value in
-                            if value.translation.height < -50 {
-                                isDeckExpanded = true
-                            } else if value.translation.height > 50 {
-                                isDeckExpanded = false
-                            }
-                            dragOffset = 0
-                        }
-                )
-                .onTapGesture {
-                    isDeckExpanded.toggle()
+    private var floatingPlayerPanel: some View {
+        VStack(spacing: 16) {
+            let stats = bookTimingStats
+            let progress = overallProgress
+            
+            // Row 1: Sleek Progress Bar and Timers
+            VStack(spacing: 8) {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.primary.opacity(0.1))
+                            .frame(height: 4)
+                        
+                        Capsule()
+                            .fill(Color.accentColor)
+                            .frame(width: geo.size.width * CGFloat(progress), height: 4)
+                    }
                 }
-
-            if isDeckExpanded {
-                expandedDeckContent
-            } else {
-                collapsedDeckContent
-            }
-        }
-        .background(
-            UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20, style: .continuous)
-                .fill(playerDeckBackgroundColor)
-                .ignoresSafeArea(edges: .bottom)
-        )
-        .overlay(
-            UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20, style: .continuous)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
-                .ignoresSafeArea(edges: .bottom)
-        )
-        .shadow(color: .black.opacity(0.08), radius: 15, x: 0, y: -5)
-        .offset(y: dragOffset)
-    }
-
-    private var collapsedDeckContent: some View {
-        HStack(spacing: 16) {
-            CoverImageView(id: session.document.id)
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .shadow(color: .black.opacity(0.1), radius: 3)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                let chapter = session.document.chapters[session.currentChapterIndex]
-                Text(chapter.title)
-                    .font(.system(size: 13, weight: .bold, design: .serif))
-                    .lineLimit(1)
+                .frame(height: 4)
+                .padding(.horizontal, 20)
                 
-                Text("Paragraph \(session.currentParagraphIndex + 1) of \(chapter.paragraphs.count)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 14) {
-                Button {
-                    session.skip(seconds: -15)
-                } label: {
-                    Image(systemName: "gobackward.15")
-                        .font(.system(size: 18, weight: .semibold))
+                HStack {
+                    Text(stats.elapsed)
+                        .font(.j7Caption)
+                        .foregroundStyle(.secondary)
+                    
+                    Spacer()
+                    
+                    Text(stats.remaining)
+                        .font(.j7CaptionSerifBold)
+                        .foregroundStyle(Color.primary)
+                    
+                    Spacer()
+                    
+                    Text(stats.total)
+                        .font(.j7Caption)
+                        .foregroundStyle(.secondary)
                 }
-                .foregroundStyle(Color.primary)
-                
+                .padding(.horizontal, 20)
+            }
+            .padding(.top, 16)
+            
+            // Row 2: Playback Controls Row (Mute, SkipBack, Play/Pause Circle, SkipForward, Speed Menu)
+            HStack(spacing: 0) {
+                // Mute Button
                 Button {
-                    session.togglePlay()
+                    isMuted.toggle()
+                    if isMuted {
+                        session.player.pause()
+                    } else {
+                        session.player.play()
+                    }
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 } label: {
+                    Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .font(.j7BodyBold)
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 44, height: 44)
+                        .background(Color.primary.opacity(0.05), in: Circle())
+                }
+                
+                Spacer()
+                
+                // Skip backward (15s)
+                Button {
+                    session.skip(seconds: -15)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: {
+                    Image(systemName: "gobackward.15")
+                        .font(.j7Title3)
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 44, height: 44)
+                }
+                
+                Spacer()
+                
+                // Center Play/Pause button
+                Button {
+                    session.togglePlay()
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                } label: {
                     ZStack {
+                        Circle()
+                            .fill(Color.primary)
+                            .frame(width: 58, height: 58)
+                            .shadow(color: Color.primary.opacity(0.12), radius: 6, x: 0, y: 3)
+                        
                         Image(systemName: session.state == .playing ? "pause.fill" : "play.fill")
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.j7Title1)
+                            .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
                             .contentTransition(.symbolEffect(.replace))
-                            .opacity(session.isBuffering ? 0.3 : 1.0)
+                            .offset(x: (session.state == .playing || session.isBuffering) ? 0 : 2)
+                            .opacity(session.isBuffering ? 0.2 : 1.0)
                         
                         if session.isBuffering {
                             ProgressView()
                                 .progressViewStyle(.circular)
-                                .scaleEffect(0.9)
+                                .tint(colorScheme == .dark ? Color.black : Color.white)
+                                .scaleEffect(1.1)
                         }
                     }
-                    .frame(width: 40, height: 40)
-                    .background(Color.primary.opacity(0.05), in: Circle())
                 }
-                .foregroundStyle(Color.primary)
-
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                // Skip forward (30s)
                 Button {
-                    session.skip(seconds: 15)
+                    session.skip(seconds: 30)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 } label: {
-                    Image(systemName: "goforward.15")
-                        .font(.system(size: 18, weight: .semibold))
+                    Image(systemName: "goforward.30")
+                        .font(.j7Title3)
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 44, height: 44)
                 }
-                .foregroundStyle(Color.primary)
+                
+                Spacer()
+                
+                // Speed Selector Pill (Right)
+                Menu {
+                    ForEach([Float(0.8), Float(1.0), Float(1.25), Float(1.5), Float(1.75), Float(2.0)], id: \.self) { rate in
+                        Button {
+                            session.setRate(rate)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        } label: {
+                            HStack {
+                                Text(String(format: "%.2f×", rate))
+                                if session.playbackRate == rate {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Text(String(format: "%.1f×", session.playbackRate))
+                        .font(.j7SubheadlineBold)
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 44, height: 44)
+                        .background(Color.primary.opacity(0.05), in: Circle())
+                }
             }
+            .padding(.horizontal, 16)
+            
+            // Row 3: Direct Utility Actions (Symmetrical balance spacer, Voice selector pill, Chapter button)
+            HStack(spacing: 0) {
+                // Font size picker (Left)
+                Menu {
+                    ForEach([14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0], id: \.self) { size in
+                        Button {
+                            appState.fontSize = size
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        } label: {
+                            HStack {
+                                Text("\(Int(size)) pt" + (size == 18.0 ? " (Default)" : ""))
+                                if appState.fontSize == size {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "textformat.size")
+                        .font(.j7BodyBold)
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 44, height: 44)
+                        .background(Color.primary.opacity(0.05), in: Circle())
+                }
+                
+                Spacer()
+                
+                // Voice selector pill (Center)
+                Button {
+                    showVoices = true
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                } label: {
+                    Text(session.voice.name)
+                        .font(.j7SubheadlineSerifBold)
+                        .foregroundStyle(Color.primary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(Color.primary.opacity(0.06), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                // Chapter selector list icon (Right)
+                Button {
+                    showChapters = true
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } label: {
+                    Image(systemName: "list.bullet")
+                        .font(.j7BodyBold)
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 44, height: 44)
+                        .background(Color.primary.opacity(0.05), in: Circle())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
-        .padding(.top, 4)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.primary.opacity(colorScheme == .dark ? 0.15 : 0.08), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.08), radius: 15, x: 0, y: 10)
     }
 
     private var overallProgress: Double {
@@ -529,153 +827,7 @@ struct AudioPlayerView: View {
         return "\(m)m"
     }
 
-    private var expandedDeckContent: some View {
-        VStack(spacing: 20) {
-            // Dynamic Audio Progress Bar & Timing (Screen 1 style)
-            let stats = bookTimingStats
-            let progress = overallProgress
-            
-            VStack(spacing: 8) {
-                // Slider timeline bar
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.primary.opacity(0.1))
-                            .frame(height: 4)
-                        
-                        Capsule()
-                            .fill(Color.accentColor)
-                            .frame(width: geo.size.width * CGFloat(progress), height: 4)
-                    }
-                }
-                .frame(height: 4)
-                .padding(.horizontal, 24)
-                
-                // Timers Row: elapsed, remaining, total
-                HStack {
-                    Text(stats.elapsed)
-                        .font(.system(size: 12, weight: .regular, design: .serif))
-                        .foregroundStyle(.secondary)
-                    
-                    Spacer()
-                    
-                    Text(stats.remaining)
-                        .font(.system(size: 12, weight: .bold, design: .serif))
-                        .foregroundStyle(Color.primary)
-                    
-                    Spacer()
-                    
-                    Text(stats.total)
-                        .font(.system(size: 12, weight: .regular, design: .serif))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 24)
-            }
-            .padding(.vertical, 8)
 
-            // Central Transport controls row (Screen 1 style)
-            HStack(spacing: 36) {
-                let atFirst = session.currentChapterIndex == 0
-                let atLast  = session.currentChapterIndex >= session.document.chapters.count - 1
-
-                Button {
-                    if !atFirst {
-                        session.jumpToChapter(session.currentChapterIndex - 1)
-                    }
-                } label: {
-                    Image(systemName: "backward.end.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(atFirst ? Color.primary.opacity(0.2) : .primary)
-                }
-
-                Button {
-                    session.skip(seconds: -30)
-                } label: {
-                    Image(systemName: "gobackward.30")
-                        .font(.system(size: 24, weight: .semibold))
-                }
-                .foregroundStyle(Color.primary)
-
-                Button {
-                    session.togglePlay()
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.primary)
-                            .frame(width: 72, height: 72)
-                            .shadow(color: Color.primary.opacity(0.15), radius: 8, x: 0, y: 4)
-                        
-                        Image(systemName: session.state == .playing ? "pause.fill" : "play.fill")
-                            .font(.system(size: 26, weight: .bold))
-                            .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
-                            .contentTransition(.symbolEffect(.replace))
-                            .offset(x: session.state == .playing ? 0 : 2)
-                            .opacity(session.isBuffering ? 0.2 : 1.0)
-                        
-                        if session.isBuffering {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .tint(colorScheme == .dark ? Color.black : Color.white)
-                                .scaleEffect(1.4)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    session.skip(seconds: 30)
-                } label: {
-                    Image(systemName: "goforward.30")
-                        .font(.system(size: 24, weight: .semibold))
-                }
-                .foregroundStyle(Color.primary)
-
-                Button {
-                    if !atLast {
-                        session.jumpToChapter(session.currentChapterIndex + 1)
-                    }
-                } label: {
-                    Image(systemName: "forward.end.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(atLast ? Color.primary.opacity(0.2) : .primary)
-                }
-            }
-            .foregroundStyle(Color.primary)
-            
-            // Subtractive bottom controls row: Chapter Picker and ... More Options Button
-            HStack(spacing: 12) {
-                Button {
-                    showChapters = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "list.bullet")
-                            .font(.caption.bold())
-                        Text("Chapter \(session.currentChapterIndex + 1) of \(session.document.chapters.count)")
-                            .font(.caption.bold())
-                        Image(systemName: "chevron.up")
-                            .font(.caption2.bold())
-                    }
-                    .foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.08), in: Capsule())
-                }
-                
-                Button {
-                    showMoreOptions = true
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color.primary)
-                        .frame(width: 36, height: 36)
-                        .background(Color.primary.opacity(0.05), in: Circle())
-                }
-            }
-            .padding(.top, 10)
-            .padding(.bottom, 24)
-        }
-    }
 
     private func resetAutoHideTimer() {
         autoHideWorkItem?.cancel()
@@ -719,7 +871,7 @@ struct SettingsSheet: View {
                     } else {
                         if appleVoices.isEmpty {
                             Text("No enhanced voices available.")
-                                .font(.caption)
+                                .font(.j7Caption)
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(appleVoices) { voice in voiceRow(voice) }
@@ -736,7 +888,7 @@ struct SettingsSheet: View {
                                 .foregroundStyle(Color.primary)
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.caption2.bold())
+                                .font(.j7Caption2Bold)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -751,7 +903,7 @@ struct SettingsSheet: View {
                         }
                     } footer: {
                         Text("Supertonic 3 is purpose-built for audiobooks (~400 MB, one-time download).")
-                            .font(.caption)
+                            .font(.j7Caption)
                     }
                 }
 
@@ -808,7 +960,7 @@ struct SettingsSheet: View {
                 .preferredColorScheme(appState.selectedAppearance.colorScheme)
             }
             .sheet(isPresented: $showVoices) {
-                VoicesView()
+                VoicesView(isLocked: true)
                     .environment(appState)
                     .preferredColorScheme(appState.selectedAppearance.colorScheme)
             }
@@ -820,15 +972,15 @@ struct SettingsSheet: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(voice.name)
-                    .font(.system(.body, design: .serif).bold())
+                    .font(.j7SubheadlineSerifBold)
                 Text(voice.language == "en" ? "English" : voice.language.uppercased())
-                    .font(.caption)
+                    .font(.j7Caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
             if session.voice.id == voice.id {
                 Image(systemName: "checkmark")
-                    .font(.subheadline.bold())
+                    .font(.j7SubheadlineBold)
                     .foregroundStyle(Color.accentColor)
             }
         }
@@ -852,10 +1004,10 @@ struct AudioChapterPickerView: View {
                 } label: {
                     HStack {
                         Text("\(chapter.index + 1).")
-                            .font(.caption.monospacedDigit())
+                            .font(.j7Caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                         Text(chapter.title)
-                            .font(.system(.body, design: .serif))
+                            .font(.j7BodySerif)
                             .foregroundStyle(session.currentChapterIndex == chapter.index ? Color.accentColor : .primary)
                         Spacer()
                         if session.currentChapterIndex == chapter.index {
@@ -893,20 +1045,17 @@ struct MoreOptionsSheet: View {
                         showVoices = true
                     } label: {
                         HStack(spacing: 12) {
-                            FluidAvatarView(voice: session.voice)
-                                .frame(width: 40, height: 40)
-                            
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Narrator Voice")
-                                    .font(.system(.body, design: .serif).bold())
+                                    .font(.j7SubheadlineSerifBold)
                                 Text(session.voice.name)
-                                    .font(.caption)
+                                    .font(.j7Caption)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.caption.bold())
-                                .foregroundStyle(.secondary)
+                                .font(.j7CaptionBold)
+                                .foregroundStyle(.secondary.opacity(0.5))
                         }
                     }
                     .foregroundStyle(Color.primary)
@@ -933,27 +1082,27 @@ struct MoreOptionsSheet: View {
                     } label: {
                         HStack {
                             Text("Sleep Timer")
-                                .font(.system(.body, design: .serif).bold())
+                                .font(.j7SubheadlineSerifBold)
                             Spacer()
                             
                             if session.sleepTimerOption != .off {
                                 if let remaining = session.sleepTimerSecondsRemaining {
                                     Text(formatRemaining(remaining))
-                                        .font(.caption.bold())
+                                        .font(.j7CaptionBold)
                                         .foregroundStyle(Color.accentColor)
                                 } else {
                                     Text(session.sleepTimerOption.rawValue)
-                                        .font(.caption.bold())
+                                        .font(.j7CaptionBold)
                                         .foregroundStyle(Color.accentColor)
                                 }
                             } else {
                                 Text("Off")
-                                    .font(.caption)
+                                    .font(.j7Caption)
                                     .foregroundStyle(.secondary)
                             }
                             
                             Image(systemName: "chevron.right")
-                                .font(.caption.bold())
+                                .font(.j7CaptionBold)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -967,7 +1116,7 @@ struct MoreOptionsSheet: View {
                         showSettings = true
                     } label: {
                         Label("Visual Settings & Quality", systemImage: "slider.horizontal.3")
-                            .font(.system(.body, design: .serif).bold())
+                            .font(.j7SubheadlineSerifBold)
                             .foregroundStyle(Color.primary)
                     }
                 }
@@ -980,7 +1129,7 @@ struct MoreOptionsSheet: View {
                 }
             }
             .sheet(isPresented: $showVoices) {
-                VoicesView()
+                VoicesView(isLocked: true)
                     .environment(appState)
                     .preferredColorScheme(appState.selectedAppearance.colorScheme)
             }
@@ -1017,14 +1166,14 @@ struct SleepTimerView: View {
                     } label: {
                         HStack {
                             Text(option.rawValue)
-                                .font(.system(.body, design: .serif))
+                                .font(.j7BodySerif)
                                 .foregroundStyle(session.sleepTimerOption == option ? Color.accentColor : .primary)
                             
                             Spacer()
                             
                             if session.sleepTimerOption == option {
                                 Image(systemName: "checkmark")
-                                    .font(.subheadline.bold())
+                                    .font(.j7SubheadlineBold)
                                     .foregroundStyle(Color.accentColor)
                             }
                         }

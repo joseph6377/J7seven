@@ -22,11 +22,11 @@ struct ImportView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("Synthesis Quality")
-                                .font(.system(size: 13, weight: .semibold, design: .serif))
+                                .font(.j7SubheadlineSerifBold)
                                 .foregroundStyle(.primary)
                             Spacer()
                             Text(qualityName(for: defaultSteps))
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.j7CaptionBold)
                                 .foregroundStyle(Color.accentColor)
                         }
                         .padding(.horizontal, 4)
@@ -97,16 +97,16 @@ struct ImportView: View {
                     
                     // Fine line interactive vector icon
                     Image(systemName: "plus")
-                        .font(.system(size: 28, weight: .light))
+                        .font(.j7TitleLarge)
                         .foregroundStyle(Color.accentColor)
                 }
                 
                 VStack(spacing: 6) {
                     Text("Add Book")
-                        .font(.system(size: 20, weight: .semibold, design: .serif))
+                        .font(.j7Title3Serif)
                         .foregroundStyle(.primary)
                     Text("Select an EPUB to generate speech")
-                        .font(.system(size: 12))
+                        .font(.j7Caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -120,11 +120,11 @@ struct ImportView: View {
     private func minimalStat(title: String, value: String) -> some View {
         VStack(spacing: 4) {
             Text(title)
-                .font(.system(size: 9, weight: .bold))
+                .font(.j7Caption2Bold)
                 .foregroundStyle(.secondary)
                 .kerning(1.0)
             Text(value)
-                .font(.system(size: 13, weight: .medium, design: .serif))
+                .font(.j7SubheadlineSerifBold)
                 .foregroundStyle(.primary)
         }
         .frame(maxWidth: .infinity)

@@ -7,92 +7,120 @@ struct VoicesView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var samplePlayer = VoiceSamplePlayer()
     @State private var showModelDownload = false
+    @State private var showEngineInfo = false
+    
+    let isLocked: Bool
+    @State private var selectedLanguage: String = "en"
+
+    init(isLocked: Bool = false) {
+        self.isLocked = isLocked
+    }
 
     private var supertonicVoices: [TTSVoice] { TTSVoice.loadAll() }
     private var appleVoices: [TTSVoice] { appState.appleVoiceScheduler.cachedVoices }
 
+    private var availableLanguages: [String] {
+        ["en", "es", "fr", "de", "ja", "ko", "it", "pt"]
+    }
+
+    private var filteredSupertonicVoices: [TTSVoice] {
+        supertonicVoices.filter { $0.language == selectedLanguage }
+    }
+
+    private var filteredAppleVoices: [TTSVoice] {
+        appleVoices.filter { $0.language == selectedLanguage }
+    }
+
+    private func languageDisplayName(for code: String) -> String {
+        let locale = Locale(identifier: Locale.preferredLanguages.first ?? "en")
+        if let name = locale.localizedString(forLanguageCode: code) {
+            return name.capitalized
+        }
+        return code.uppercased()
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    // Header Studio Description Card (2026 Editorial touch)
-                    narratorIntroCard
+                VStack(alignment: .leading, spacing: 24) {
+                    // Subtle Inline Subtitle
+                    Text("Select your preferred narrator for studio-quality, offline playback.")
+                        .font(.j7Body)
+                        .foregroundStyle(.secondary)
                         .padding(.horizontal, 16)
+                        .padding(.top, 4)
                     
-                    // Supertonic AI Voices Section
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack(alignment: .bottom) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Narrator Studio")
-                                    .font(.system(.title3, design: .serif).bold())
-                                Text("Premium custom-trained models")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text("AI On-Device")
-                                .font(.system(size: 10, weight: .black))
-                                .foregroundStyle(Color.accentColor)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.accentColor.opacity(0.12), in: Capsule())
-                        }
-                        .padding(.horizontal, 16)
-                        
-                        LazyVStack(spacing: 12) {
-                            ForEach(supertonicVoices) { voice in
-                                AcousticVoiceCard(
-                                    voice: voice,
-                                    isActive: isVoiceActive(voice),
-                                    isPlaying: samplePlayer.playingVoiceId == voice.id,
-                                    isPremium: true,
-                                    description: description(for: voice),
-                                    onPlayToggle: {
-                                        playPreview(for: voice)
-                                    },
-                                    onSelect: {
-                                        selectVoice(voice)
-                                    }
-                                )
-                            }
-                        }
-                        .padding(.horizontal, 16)
+                    // Dynamic Language Filter Pill Bar
+                    if !isLocked && availableLanguages.count > 1 {
+                        languageFilterBar
                     }
                     
-                    // Apple System Voices Section
-                    if !appleVoices.isEmpty {
-                        VStack(alignment: .leading, spacing: 14) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("System Classics")
-                                    .font(.system(.title3, design: .serif).bold())
-                                Text("Native system synthesizers")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 16)
-                            
-                            LazyVStack(spacing: 12) {
-                                ForEach(appleVoices) { voice in
-                                    AcousticVoiceCard(
-                                        voice: voice,
-                                        isActive: isVoiceActive(voice),
-                                        isPlaying: samplePlayer.playingVoiceId == voice.id,
-                                        isPremium: false,
-                                        description: description(for: voice),
-                                        onPlayToggle: {
-                                            playPreview(for: voice)
-                                        },
-                                        onSelect: {
-                                            selectVoice(voice)
-                                        }
-                                    )
+                    if isSupertonicReady() {
+                        // Supertonic AI Voices Section
+                        if !filteredSupertonicVoices.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack(alignment: .bottom) {
+                                    Text("Narrator Studio")
+                                        .font(.j7Title3Serif)
+                                    Spacer()
+                                    Text("AI On-Device")
+                                        .font(.j7Caption2Bold)
+                                        .foregroundStyle(Color.accentColor)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(Color.accentColor.opacity(0.1), in: Capsule())
                                 }
+                                .padding(.horizontal, 16)
+                                
+                                LazyVStack(spacing: 8) {
+                                    ForEach(filteredSupertonicVoices) { voice in
+                                        AcousticVoiceCard(
+                                            voice: voice,
+                                            isActive: isVoiceActive(voice),
+                                            isPlaying: samplePlayer.playingVoiceId == voice.id,
+                                            isPremium: true,
+                                            onPlayToggle: {
+                                                playPreview(for: voice)
+                                            },
+                                            onSelect: {
+                                                selectVoice(voice)
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding(.horizontal, 16)
                             }
-                            .padding(.horizontal, 16)
+                        }
+                    } else {
+                        // Apple System Voices Section
+                        if !filteredAppleVoices.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("System Classics")
+                                    .font(.j7Title3Serif)
+                                    .padding(.horizontal, 16)
+                                
+                                LazyVStack(spacing: 8) {
+                                    ForEach(filteredAppleVoices) { voice in
+                                        AcousticVoiceCard(
+                                            voice: voice,
+                                            isActive: isVoiceActive(voice),
+                                            isPlaying: samplePlayer.playingVoiceId == voice.id,
+                                            isPremium: false,
+                                            onPlayToggle: {
+                                                playPreview(for: voice)
+                                            },
+                                            onSelect: {
+                                                selectVoice(voice)
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                            }
                         }
                     }
                 }
-                .padding(.top, 16)
+                .padding(.top, 8)
                 .padding(.bottom, 120) // Cushion for floating bottom player deck
             }
             .navigationTitle("Voices")
@@ -101,9 +129,21 @@ struct VoicesView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showEngineInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .imageScale(.large)
+                    }
+                }
             }
             .onDisappear {
                 samplePlayer.stop()
+            }
+            .sheet(isPresented: $showEngineInfo) {
+                EngineInfoSheet()
+                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
             }
             .sheet(isPresented: $showModelDownload) {
                 ModelDownloadView(
@@ -112,41 +152,60 @@ struct VoicesView: View {
                 )
                 .preferredColorScheme(appState.selectedAppearance.colorScheme)
             }
+            .onAppear {
+                if let activeSession = appState.activeSession {
+                    // 1. Detect the book's dominant language
+                    let bookLang = activeSession.document.detectedLanguage
+                    
+                    // 2. If it's supported by our 8 major languages, select it!
+                    if availableLanguages.contains(bookLang) {
+                        selectedLanguage = bookLang
+                    } else {
+                        // Fall back to active voice's language
+                        selectedLanguage = activeSession.voice.language
+                    }
+                } else {
+                    let activeVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId") ?? "M1-en"
+                    if let matched = supertonicVoices.first(where: { $0.id == activeVoiceId }) {
+                        selectedLanguage = matched.language
+                    } else if activeVoiceId.contains("-"), let lang = activeVoiceId.split(separator: "-").last {
+                        selectedLanguage = String(lang)
+                    } else {
+                        selectedLanguage = "en"
+                    }
+                }
+            }
         }
     }
 
     // MARK: - Subviews
 
-    private var narratorIntroCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: "waveform.badge.mic")
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Supertonic 3 Narration Engine")
-                        .font(.system(.subheadline, design: .serif).bold())
-                    Text("Offline Synthesis • Neural Engine")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
+    private var languageFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                // Individual Language Pills
+                ForEach(availableLanguages, id: \.self) { lang in
+                    Button {
+                        selectedLanguage = lang
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    } label: {
+                        Text(languageDisplayName(for: lang))
+                            .font(.j7SubheadlineBold)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                selectedLanguage == lang ? Color.accentColor : Color.primary.opacity(0.04)
+                            )
+                            .foregroundStyle(
+                                selectedLanguage == lang ? Color.white : .primary
+                            )
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
-                Spacer()
             }
-            
-            Text("Experience fully private, studio-quality audiobook narration. Each model is custom-trained to provide unique natural inflection, deep characterization, and high-fidelity vocal textures, synthesized dynamically on your Apple Neural Engine.")
-                .font(.system(.caption, design: .serif))
-                .foregroundStyle(.secondary)
-                .lineSpacing(4)
+            .padding(.horizontal, 16)
         }
-        .padding(.all, 16)
-        .background(Color.accentColor.opacity(0.02))
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.accentColor.opacity(0.12), lineWidth: 1)
-        )
     }
 
     // MARK: - Helper Methods
@@ -155,8 +214,9 @@ struct VoicesView: View {
         if let activeSession = appState.activeSession {
             return activeSession.voice.id == voice.id
         } else {
-            let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId") ?? "M1"
-            return voice.id == savedVoiceId
+            let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId") ?? "M1-en"
+            let normalizedSaved = savedVoiceId.contains("-") ? savedVoiceId : "\(savedVoiceId)-en"
+            return voice.id == normalizedSaved
         }
     }
 
@@ -191,22 +251,50 @@ struct VoicesView: View {
         }
         return false
     }
+}
 
-    private func description(for voice: TTSVoice) -> String {
-        switch voice.id {
-        case "M1": return "Deep, Cinematic & Resonant"
-        case "M2": return "Clear, Articulate & Professional"
-        case "M3": return "Warm, Engaging & Conversational"
-        case "M4": return "Energetic, Crisp & Dramatic"
-        case "M5": return "Smooth, Classic & Expressive"
-        case "F1": return "Sleek, Vibrant & Narrative"
-        case "F2": return "Warm, Comforting & Gentle"
-        case "F3": return "Crisp, Articulate & Educational"
-        case "F4": return "Bright, Lively & Animated"
-        case "F5": return "Soft, Elegant & Whispering"
-        default:
-            return voice.gender == .male ? "Standard Male voice preview" : "Standard Female voice preview"
+// MARK: - Engine Info Sheet Component
+
+struct EngineInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(spacing: 16) {
+                    Image(systemName: "waveform.badge.mic")
+                        .font(.system(size: 36))
+                        .foregroundStyle(Color.accentColor)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Supertonic 3")
+                            .font(.j7Title1Serif)
+                        Text("Offline Synthesis • Neural Engine")
+                            .font(.j7SubheadlineBold)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 8)
+                
+                Divider()
+                
+                Text("Experience fully private, studio-quality audiobook narration. Each model is custom-trained to provide unique natural inflection, deep characterization, and high-fidelity vocal textures, synthesized dynamically on your Apple Neural Engine.")
+                    .font(.j7BodySerif)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(6)
+                
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle("Narration Engine")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
         }
+        .presentationDetents([.fraction(0.35), .medium])
     }
 }
 
@@ -217,171 +305,66 @@ struct AcousticVoiceCard: View {
     let isActive: Bool
     let isPlaying: Bool
     let isPremium: Bool
-    let description: String
     let onPlayToggle: () -> Void
     let onSelect: () -> Void
     
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 16) {
-                // Fluid Spherical Avatar
-                FluidAvatarView(voice: voice)
-                    .frame(width: 52, height: 52)
-                
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         Text(voice.name)
-                            .font(.system(.headline, design: .serif))
+                            .font(.j7BodyBold)
                             .foregroundStyle(isActive ? Color.accentColor : .primary)
                         
-                        if isPremium {
-                            Text("STUDIO AI")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(Color.accentColor)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.accentColor.opacity(0.12), in: Capsule())
-                        } else {
-                            Text("SYSTEM")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.primary.opacity(0.06), in: Capsule())
-                        }
-                        
                         if isActive {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.caption2)
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.j7Caption)
                                 .foregroundStyle(Color.accentColor)
                         }
                     }
-                    
-                    Text(description)
-                        .font(.system(.subheadline, design: .serif))
-                        .italic()
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    
-                    HStack(spacing: 8) {
-                        Text(voice.gender == .male ? "Male" : "Female")
-                        Text("•")
-                        Text(voice.language == "en" ? "English" : voice.language.uppercased())
-                    }
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.tertiary)
                 }
                 
                 Spacer()
                 
                 // Visualizer & play preview block
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     if isPlaying {
                         MicroWaveformVisualizer(isPlaying: true)
                     }
                     
                     Button(action: onPlayToggle) {
                         Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.j7CaptionBold)
                             .foregroundStyle(isPlaying ? Color.primary : Color.accentColor)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 32, height: 32)
                             .background(
                                 Circle()
-                                    .fill(isPlaying ? Color.primary.opacity(0.1) : Color.accentColor.opacity(0.12))
+                                    .fill(isPlaying ? Color.primary.opacity(0.08) : Color.accentColor.opacity(0.1))
                             )
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.all, 14)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(isActive ? Color.accentColor.opacity(0.03) : Color.primary.opacity(0.02))
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(isActive ? Color.accentColor.opacity(0.02) : Color.primary.opacity(0.01))
             )
             .background(
-                RoundedRectangle(cornerRadius: 18)
+                RoundedRectangle(cornerRadius: 14)
                     .fill(.ultraThinMaterial)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18)
+                RoundedRectangle(cornerRadius: 14)
                     .stroke(
-                        isActive ? Color.accentColor.opacity(0.4) : Color.primary.opacity(0.06),
-                        lineWidth: isActive ? 1.5 : 1
+                        isActive ? Color.accentColor.opacity(0.25) : Color.primary.opacity(0.04),
+                        lineWidth: isActive ? 1.2 : 0.8
                     )
-            )
-            .shadow(
-                color: isActive ? Color.accentColor.opacity(0.08) : Color.black.opacity(0.01),
-                radius: 10,
-                x: 0,
-                y: 4
             )
         }
         .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Fluid Avatar Component
-
-struct FluidAvatarView: View {
-    let voice: TTSVoice
-    
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: gradientColors(for: voice.id),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            
-            // Soft glossmorphic crescent lighting overlay for fluid liquid bubble effect
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.35), Color.clear],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .padding(2)
-            
-            // Elegant serif initial letter
-            Text(String(voice.name.prefix(1)))
-                .font(.system(.title3, design: .serif).bold())
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
-        }
-        .shadow(
-            color: gradientColors(for: voice.id).first?.opacity(0.3) ?? .clear,
-            radius: 8,
-            x: 0,
-            y: 4
-        )
-    }
-    
-    private func gradientColors(for voiceId: String) -> [Color] {
-        switch voiceId {
-        case "M1": return [Color(hex: "4A154B"), Color(hex: "1F2D5A"), Color(hex: "0F172A")] // Marcus: Deep Midnight Purple
-        case "M2": return [Color(hex: "1A365D"), Color(hex: "2B6CB0"), Color(hex: "4A5568")] // Nathan: Professional Navy
-        case "M3": return [Color(hex: "C05621"), Color(hex: "ED8936"), Color(hex: "ECC94B")] // Oliver: Warm Amber/Orange
-        case "M4": return [Color(hex: "9B2C2C"), Color(hex: "E53E3E"), Color(hex: "DD6B20")] // Paul: Electric Red
-        case "M5": return [Color(hex: "22543D"), Color(hex: "38A169"), Color(hex: "718096")] // Ryan: Classic Sage Green
-        case "F1": return [Color(hex: "B83280"), Color(hex: "ED64A6"), Color(hex: "6B46C1")] // Alice: Sleek Violet/Pink
-        case "F2": return [Color(hex: "D53F8C"), Color(hex: "F687B3"), Color(hex: "FED7E2")] // Beth: Soft YA Pink/Peach
-        case "F3": return [Color(hex: "2C5282"), Color(hex: "319795"), Color(hex: "4FD1C5")] // Claire: Crisp Teal
-        case "F4": return [Color(hex: "ECC94B"), Color(hex: "F6E05E"), Color(hex: "DD6B20")] // Diana: Bright Gold
-        case "F5": return [Color(hex: "553C9A"), Color(hex: "805AD5"), Color(hex: "B794F4")] // Eve: Elegant Orchid
-        default:
-            let hash = abs(voiceId.hashValue)
-            let systemPalettes: [[Color]] = [
-                [Color(hex: "007AFF"), Color(hex: "5856D6"), Color(hex: "AF52DE")],
-                [Color(hex: "30B0C7"), Color(hex: "34C759"), Color(hex: "007AFF")],
-                [Color(hex: "FF2D55"), Color(hex: "FF9500"), Color(hex: "FFCC00")]
-            ]
-            return systemPalettes[hash % systemPalettes.count]
-        }
     }
 }
 
@@ -463,30 +446,126 @@ final class VoiceSamplePlayer: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     private func getSampleText(for voice: TTSVoice) -> String {
-        switch voice.id {
-        case "M1":
-            return "Hello! I am Marcus. My voice is deep and resonant, custom-crafted for epic fantasy novels and grand historical biographies."
-        case "M2":
-            return "Hello there! I am Nathan. With a clear and highly articulate delivery, I bring non-fiction and business audiobooks to life."
-        case "M3":
-            return "Hi, I'm Oliver. I provide a warm and engaging narrative tone, perfect for self-help guides, biographies, and memoirs."
-        case "M4":
-            return "Hey! I am Paul. My energetic and crisp pacing is perfect for keeping you on the edge of your seat during thrillers and sci-fi adventures."
-        case "M5":
-            return "Hello. I am Ryan. My smooth and classic narration is tailored for literature, romance, and reflective essays."
-        case "F1":
-            return "Hello! I am Alice. I offer a sleek and highly expressive reading style, ideal for modern fiction and mystery novels."
-        case "F2":
-            return "Hello there. I am Beth. My warm and comforting narration style is perfect for bedtime listening and young adult fiction."
-        case "F3":
-            return "Welcome! I am Claire. With a crisp, highly professional tone, I make complex educational and technical books easy to follow."
-        case "F4":
-            return "Hi! I am Diana. My bright and lively tone is wonderful for children's stories, comedy, and lighthearted tales."
-        case "F5":
-            return "Hello. I'm Eve. I deliver a soft, elegant narrative flow, bringing poetry, drama, and classic prose to life."
+        let baseId = voice.id.components(separatedBy: "-").first ?? voice.id
+        let lang = voice.language
+        
+        switch lang {
+        case "es":
+            switch baseId {
+            case "M1": return "¡Hola! Soy Mateo. Mi voz es profunda y resonante, diseñada para novelas de fantasía y biografías históricas."
+            case "M2": return "¡Hola! Soy Santiago. Con una pronunciación clara y articulada, doy vida a los audiolibros de negocios y no ficción."
+            case "M3": return "Hola, soy Alejandro. Ofrezco un tono narrativo cálido y atractivo, perfecto para guías de autoayuda y memorias."
+            case "M4": return "¡Hola! Soy Sebastián. Mi ritmo enérgico es perfecto para mantenerte al límite en thrillers y aventuras de ciencia ficción."
+            case "M5": return "Hola. Soy Javier. Mi narración suave y clásica es ideal para la literatura, el romance y los ensayos reflexivos."
+            case "F1": return "¡Hola! Soy Valentina. Ofrezco un estilo de lectura elegante y expresivo, ideal para ficción moderna y misterio."
+            case "F2": return "Hola. Soy Sofía. Mi estilo cálido y reconfortante es perfecto para escuchar antes de dormir y ficción juvenil."
+            case "F3": return "¡Bienvenido! Soy Camila. Con un tono profesional y claro, hago que los libros educativos sean fáciles de seguir."
+            case "F4": return "¡Hola! Soy Isabella. Mi tono brillante y alegre es maravilloso para historias infantiles y relatos ligeros."
+            case "F5": return "Hola. Soy Valeria. Ofrezco un flujo narrativo suave y elegante, dando vida a la poesía, el drama y la prosa clásica."
+            default: break
+            }
+        case "fr":
+            switch baseId {
+            case "M1": return "Bonjour! Je m'appelle Gabriel. Ma voix est profonde et résonnante, idéale pour les romans fantastiques et les biographies historiques."
+            case "M2": return "Bonjour! Je suis Lucas. Avec une élocution claire et articulée, je donne vie aux livres de non-fiction et de business."
+            case "M3": return "Salut, je suis Arthur. J'offre un ton narratif chaleureux et engageant, parfait pour le développement personnel et les mémoires."
+            case "M4": return "Salut! Je suis Louis. Mon rythme énergétique est parfait pour vous tenir en haleine dans les thrillers et la science-fiction."
+            case "M5": return "Bonjour. Je suis Hugo. Ma narration fluide et classique est idéale pour la littérature, la romance et les essais."
+            case "F1": return "Bonjour! Je suis Emma. Je propose un style de lecture élégant et expressif, idéal pour la fiction moderne et les polars."
+            case "F2": return "Bonjour. Je suis Chloé. Mon style chaleureux et réconfortant est parfait pour s'endormir et la fiction pour jeunes adultes."
+            case "F3": return "Bienvenue! Je suis Manon. Avec un ton professionnel et précis, je rends les livres éducatifs faciles à suivre."
+            case "F4": return "Salut! Je suis Léa. Mon ton enjoué et vivant est merveilleux pour les histoires d'enfants et les contes légers."
+            case "F5": return "Bonjour. Je suis Inès. J'apporte un flux narratif doux et élégant, donnant vie à la poésie, au drame et à la prose classique."
+            default: break
+            }
+        case "de":
+            switch baseId {
+            case "M1": return "Hallo! Ich bin Maximilian. Meine Stimme ist tief und resonant, ideal für Fantasy-Romane und historische Biografien."
+            case "M2": return "Hallo! Ich bin Lukas. Mit einer klaren und präzisen Aussprache erwecke ich Sach- und Businessbücher zum Leben."
+            case "M3": return "Hallo, ich bin Jonas. Ich biete einen warmen und einladenden Ton, perfekt für Ratgeber und Biografien."
+            case "M4": return "Hey! Ich bin Finn. Mein energisches Tempo ist perfekt, um Sie bei Thrillern und Science-Fiction in Atem zu halten."
+            case "M5": return "Hallo. Ich bin Elias. Meine sanfte und klassische Erzählweise ist maßgeschneidert für Literatur und Liebesromane."
+            case "F1": return "Hallo! Ich bin Marie. Ich biete einen ausdrucksstarken Lesestil, ideal für moderne Belletristik und Krimis."
+            case "F2": return "Hallo. Ich bin Sophie. Meine warme und beruhigende Art ist perfekt zum Einschlafen und für Jugendbücher."
+            case "F3": return "Willkommen! Ich bin Charlotte. Mit einem klaren, professionellen Ton mache ich komplexe Sachbücher leicht verständlich."
+            case "F4": return "Hallo! Ich bin Emilia. Mein fröhlicher Ton ist wunderbar für Kindergeschichten und humorvolle Erzählungen."
+            case "F5": return "Hallo. Ich bin Mia. Ich liefere einen sanften Erzählfluss, der Poesie, Drama und klassische Prosa zum Leben erweckt."
+            default: break
+            }
+        case "it":
+            switch baseId {
+            case "M1": return "Ciao! Sono Leonardo. La mia voce è profonda e risonante, ideale per romanzi fantasy e grandi biografie storiche."
+            case "M2": return "Ciao! Sono Francesco. Con una pronuncia chiara e articolata, do vita ai libri di saggistica e business."
+            case "M3": return "Ciao, sono Alessandro. Offro un tono caldo e vicino, perfetto per guide di self-help e biografie."
+            case "M4": return "Ehi! Sono Lorenzo. Il mio ritmo energico è perfetto per tenerti con il fiato sospeso in thriller e fantascienza."
+            case "M5": return "Ciao. Sono Mattia. La mia narrazione fluida e classica è ideale per letteratura, romanzi rosa e saggi."
+            case "F1": return "Ciao! Sono Sofia. Offro uno stile di leitura elegante ed espressivo, ideale per narrativa moderna e gialli."
+            case "F2": return "Ciao. Sono Aurora. Il mio stile caldo e rassicurante è perfetto per la buonanotte e la narrativa per ragazzi."
+            case "F3": return "Benvenuti! Sono Giulia. Con un tono chiaro e professionale, rendo i libri educativi semplici da seguire."
+            case "F4": return "Ciao! Sono Ginevra. Il mio tono allegro e vivace è splendido per storie per bambini e racconti leggeri."
+            case "F5": return "Ciao. Sono Beatrice. Offro un flusso narrativo morbido ed elegante, dando vita a poesia, dramma e prosa classica."
+            default: break
+            }
+        case "pt":
+            switch baseId {
+            case "M1": return "Olá! Eu sou o Miguel. Minha voz é profunda e ressonante, ideal para romances de fantasia e biografias históricas."
+            case "M2": return "Olá! Eu sou o Arthur. Com uma pronúncia clara e articulada, dou vida a audiolivros de negócios e não ficção."
+            case "M3": return "Olá, sou o Heitor. Ofereço um tom caloroso e envolvente, perfeito para guias de autoajuda e biografias."
+            case "M4": return "Olá! Eu sou o Bernardo. Meu ritmo enérgico é perfeito para manter você ansioso em thrillers e ficção científica."
+            case "M5": return "Olá. Eu sou o Davi. Minha narração clássica e suave é ideal para literatura, romance e ensaios reflexivos."
+            case "F1": return "Olá! Eu sou a Helena. Ofereço um estilo de leitura elegante e expressivo, ideal para ficção moderna e mistério."
+            case "F2": return "Olá. Eu sou a Alice. Meu estilo caloroso e confortante é perfeito para ouvir antes de dormir e ficção juvenil."
+            case "F3": return "Boas-vindas! Eu sou a Laura. Com um tom profissional e claro, torno livros educativos fáceis de acompanhar."
+            case "F4": return "Olá! Eu sou a Manuela. Meu tom brilhante e alegre é maravilhoso para histórias infantis e contos leves."
+            case "F5": return "Olá. Eu sou a Isabella. Ofereço um fluxo narrativo suave e elegante, dando vida à poesia, drama e prosa clássica."
+            default: break
+            }
+        case "ja":
+            switch baseId {
+            case "M1": return "こんにちは！ヒロトです。私の声は深く響き渡り、ファンタジー小説や歴史的な伝記に最適です。"
+            case "M2": return "こんにちは、レンです。明瞭で聞き取りやすい語りで、ビジネス書やノンフィクションに命を吹き込みます。"
+            case "M3": return "こんにちは、ユウトです。温かみのある魅力的な語り口で、自己啓発本や回顧録に最適です。"
+            case "M4": return "やあ！ミナトです。エネルギッシュで切れ味の良いテンポは、スリラーやSF小説の緊張感を高めるのにぴったりです。"
+            case "M5": return "こんにちは、ハルトです。滑らかでクラシックな語り口は、文芸作品やロマンス、省察的なエッセイに向いています。"
+            case "F1": return "こんにちは！ヒマリです。洗練された表現力豊かな読み上げスタイルで、現代小説やミステリーに最適です。"
+            case "F2": return "こんにちは、ツムギです。温かく心地よいナレーションは、お休み前の読書やヤングアダルト小説にぴったりです。"
+            case "F3": return "ようこそ！アオイです。明瞭でプロフェッショナルなトーンで、専門書や教育的な内容も分かりやすくお届けします。"
+            case "F4": return "こんにちは！イチカです。明るく生き生きとしたトーンは、児童書やコメディ、軽快な物語にぴったりです。"
+            case "F5": return "こんにちは、メイです。優雅でしなやかな語りの流れで、詩やドラマ、古典的な散文を生き生きと表現します。"
+            default: break
+            }
+        case "ko":
+            switch baseId {
+            case "M1": return "안녕하세요! 민준입니다. 제 목소리는 깊고 울림이 있어 판타지 소설과 역사 전기물에 어울립니다."
+            case "M2": return "안녕하세요! 서준입니다. 명확하고 또박또박한 발음으로 경영 서적과 비소설 분야를 생생하게 낭독합니다."
+            case "M3": return "안녕하세요, 도윤입니다. 따뜻하고 몰입감 있는 어조로 자기계발서와 회고록에 어울리는 목소리입니다."
+            case "M4": return "안녕하세요! 유준입니다. 활기차고 경쾌한 호흡으로 스릴러와 공상과학 소설의 긴장감을 극대화합니다."
+            case "M5": return "안녕하세요, 은우입니다. 부드럽고 클래식한 낭독으로 문학, 로맨스, 그리고 수필에 적합합니다."
+            case "F1": return "안녕하세요! 서아입니다. 세련되고 표현력이 풍부한 낭독 스타일로 현대 소설과 추리물에 적합합니다."
+            case "F2": return "안녕하세요, 지안입니다. 따뜻하고 포근한 음성으로 잠자리 독서와 청소년 소설에 잘 어울립니다."
+            case "F3": return "환영합니다! 하윤입니다. 명료하고 전문적인 톤으로 어려운 교육 서적도 쉽게 이해할 수 있도록 도와드립니다."
+            case "F4": return "안녕하세요! 서윤입니다. 밝고 생기 넘치는 목소리로 아동 도서와 유쾌한 이야기에 어울립니다."
+            case "F5": return "안녕하세요, 지우입니다. 부드럽고 우아한 흐름으로 시와 희곡, 그리고 클래식 산문에 생명을 불어넣습니다."
+            default: break
+            }
         default:
-            return "Hello! I am \(voice.name). This is a preview of my voice in the Books App. Do you like my pronunciation?"
+            // English / Fallback
+            switch baseId {
+            case "M1": return "Hello! I am Marcus. My voice is deep and resonant, custom-crafted for epic fantasy novels and grand historical biographies."
+            case "M2": return "Hello there! I am Nathan. With a clear and highly articulate delivery, I bring non-fiction and business audiobooks to life."
+            case "M3": return "Hi, I'm Oliver. I provide a warm and engaging narrative tone, perfect for self-help guides, biographies, and memoirs."
+            case "M4": return "Hey! I am Paul. My energetic and crisp pacing is perfect for keeping you on the edge of your seat during thrillers and sci-fi adventures."
+            case "M5": return "Hello. I am Ryan. My smooth and classic narration is tailored for literature, romance, and reflective essays."
+            case "F1": return "Hello! I am Alice. I offer a sleek and highly expressive reading style, ideal for modern fiction and mystery novels."
+            case "F2": return "Hello there. I am Beth. My warm and comforting narration style is perfect for bedtime listening and young adult fiction."
+            case "F3": return "Welcome! I am Claire. With a crisp, highly professional tone, I make complex educational and technical books easy to follow."
+            case "F4": return "Hi! I am Diana. My bright and lively tone is wonderful for children's stories, comedy, and lighthearted tales."
+            case "F5": return "Hello. I'm Eve. I deliver a soft, elegant narrative flow, bringing poetry, drama, and classic prose to life."
+            default: break
+            }
         }
+        
+        return "Hello! I am \(voice.name). This is a preview of my voice in the Books App. Do you like my pronunciation?"
     }
 
     func playSample(for voice: TTSVoice, synthesizer: SupertonicSynthesizer, activeSession: ReaderSession?) {

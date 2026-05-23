@@ -7,6 +7,7 @@ protocol PlaybackScheduler: AnyObject {
     var onParagraphStartedPlaying: ((PlaybackCursor) -> Void)? { get set }
     var onFirstAudioReady: (() -> Void)? { get set }
     var onWordRangeChanged: ((NSRange) -> Void)? { get set }
+    var onPlaybackError: ((any Error) -> Void)? { get set }
     func start(from cursor: PlaybackCursor, in document: SavedDocument, voice: TTSVoice)
     func advanceTo(cursor: PlaybackCursor, voice: TTSVoice)
     func pause()
@@ -37,6 +38,7 @@ final class SynthScheduler: PlaybackScheduler {
     var onParagraphStartedPlaying: ((PlaybackCursor) -> Void)?
     var onFirstAudioReady: (() -> Void)?
     var onWordRangeChanged: ((NSRange) -> Void)?
+    var onPlaybackError: ((any Error) -> Void)?
     private var wordHighlightTask: Task<Void, Never>?
     
     private var playbackSessionId = 0
@@ -231,6 +233,8 @@ final class SynthScheduler: PlaybackScheduler {
                 }
             } catch {
                 print("[Scheduler] Synthesis error: \(error)")
+                self.onPlaybackError?(error)
+                self.cancelPlayback()
                 break
             }
 

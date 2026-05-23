@@ -22,3 +22,6 @@ Simulator Screenshot *.png
 *.orig
 *.rej
 
+# Objects
+*.o
+

@@ -33,10 +33,10 @@ targets:
     info:
       path: BooksAppV2/Info.plist
       properties:
-        CFBundleDisplayName: J7seven
+        CFBundleDisplayName: "J7 Listen"
         CFBundleName: BooksAppV2
         CFBundleIdentifier: in.josepht.booksappv2
-        CFBundleVersion: "1"
+        CFBundleVersion: "3"
         CFBundleShortVersionString: "1.0"
         UILaunchScreen:
           UIColorName: ""
@@ -69,16 +69,36 @@ targets:
                 - epub
               public.mime-type:
                 - application/epub+zip
+    postBuildScripts:
+      - name: Fix ONNX Runtime MinimumOSVersion
+        script: |
+          set -e
+          FRAMEWORKS_PATH="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}"
+          PLIST="${FRAMEWORKS_PATH}/onnxruntime.framework/Info.plist"
+          if [ -f "$PLIST" ]; then
+              echo "Patching MinimumOSVersion in onnxruntime.framework"
+              /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string ${IPHONEOS_DEPLOYMENT_TARGET}" "$PLIST" || \
+              /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion ${IPHONEOS_DEPLOYMENT_TARGET}" "$PLIST"
+              
+              # Re-sign the framework to prevent 'integrity could not be verified' / codesign errors
+              SIGN_IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:-}"
+              if [ -z "$SIGN_IDENTITY" ]; then
+                  # Fallback to ad-hoc signing if no identity is expanded (e.g. Simulator builds)
+                  SIGN_IDENTITY="-"
+              fi
+              echo "Resigning onnxruntime.framework with identity: ${SIGN_IDENTITY}"
+              /usr/bin/codesign --force --sign "${SIGN_IDENTITY}" --timestamp=none --preserve-metadata=identifier,entitlements,flags "${FRAMEWORKS_PATH}/onnxruntime.framework"
+          fi
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: in.josepht.booksappv2
         PRODUCT_NAME: BooksAppV2
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 1
+        CURRENT_PROJECT_VERSION: 3
         MARKETING_VERSION: 1.0
         INFOPLIST_FILE: BooksAppV2/Info.plist
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""
+        DEVELOPMENT_TEAM: "537JMFBG2B"
 
   BooksAppV2Tests:
     type: bundle.unit-test

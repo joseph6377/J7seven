@@ -26,7 +26,28 @@ final class LibraryService: @unchecked Sendable {
     func loadDocument(id: UUID) -> SavedDocument? {
         let url = LibraryPaths.documentURL(id: id)
         guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? decoder.decode(SavedDocument.self, from: data)
+        guard let doc = try? decoder.decode(SavedDocument.self, from: data) else { return nil }
+        
+        // Dynamically sanitize paragraph texts to collapse newlines and redundant spaces
+        let sanitizedChapters = doc.chapters.map { chapter in
+            let sanitizedParagraphs = chapter.paragraphs.map { para in
+                para.components(separatedBy: .whitespacesAndNewlines)
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " ")
+            }
+            return ChapterText(index: chapter.index, title: chapter.title, paragraphs: sanitizedParagraphs)
+        }
+        
+        return SavedDocument(
+            id: doc.id,
+            title: doc.title,
+            author: doc.author,
+            coverImageData: doc.coverImageData,
+            importedAt: doc.importedAt,
+            lastOpenedAt: doc.lastOpenedAt,
+            chapters: sanitizedChapters,
+            cursor: doc.cursor
+        )
     }
 
     func saveDocument(_ doc: SavedDocument) {

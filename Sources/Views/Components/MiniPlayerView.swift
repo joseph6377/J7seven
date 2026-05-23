@@ -42,12 +42,12 @@ private struct MiniPlayerContent: View {
 
                         VStack(alignment: .leading, spacing: 1) {
                             Text(session.document.title)
-                                .font(.system(size: 13, weight: .bold, design: .serif))
+                                .font(.j7SubheadlineSerifBold)
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
                             
                             Text(session.document.chapters[session.currentChapterIndex].title)
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.j7CaptionMedium)
                                 .lineLimit(1)
                                 .foregroundStyle(.secondary)
                         }
@@ -66,7 +66,7 @@ private struct MiniPlayerContent: View {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     } label: {
                         Image(systemName: "gobackward.30")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.j7BodyMedium)
                             .foregroundStyle(Color.primary.opacity(0.75))
                             .frame(width: 32, height: 32)
                     }
@@ -80,7 +80,7 @@ private struct MiniPlayerContent: View {
                     } label: {
                         ZStack {
                             Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.j7BodyBold)
                                 .contentTransition(.symbolEffect(.replace))
                                 .opacity(isBuffering ? 0.3 : 1)
                             
@@ -104,7 +104,7 @@ private struct MiniPlayerContent: View {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     } label: {
                         Image(systemName: "goforward.30")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.j7BodyMedium)
                             .foregroundStyle(Color.primary.opacity(0.75))
                             .frame(width: 32, height: 32)
                     }

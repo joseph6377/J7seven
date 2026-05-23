@@ -105,4 +105,30 @@ final class LibraryServiceTests: XCTestCase {
         let entry = LibraryEntry(from: doc)
         XCTAssertEqual(entry.estimatedTimeLeft, "2 mins left")
     }
+
+    func testLibraryEntryDurationReadCalculation() {
+        // Construct a document with known word counts
+        // 150 WPM = 2.5 words per second
+        // Let's add 150 words read so far (should be exactly 60.0 seconds or 1.0 minute)
+        let paragraphText1 = Array(repeating: "word", count: 100).joined(separator: " ")
+        let paragraphText2 = Array(repeating: "word", count: 50).joined(separator: " ")
+        let paragraphText3 = Array(repeating: "word", count: 200).joined(separator: " ")
+        
+        let doc = SavedDocument(
+            id: testDocID,
+            title: "Duration Test Book",
+            author: "Author",
+            coverImageData: nil,
+            importedAt: Date(),
+            lastOpenedAt: Date(),
+            chapters: [
+                ChapterText(index: 0, title: "Ch 1", paragraphs: [paragraphText1, paragraphText2]),
+                ChapterText(index: 1, title: "Ch 2", paragraphs: [paragraphText3])
+            ],
+            cursor: PlaybackCursor(chapterIndex: 0, paragraphIndex: 2) // both paragraphs of Chapter 0 read -> 150 words
+        )
+        
+        let entry = LibraryEntry(from: doc)
+        XCTAssertEqual(entry.durationRead, 60.0, accuracy: 0.1)
+    }
 }
