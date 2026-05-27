@@ -8,7 +8,7 @@ struct VoicesView: View {
     @State private var samplePlayer = VoiceSamplePlayer()
     @State private var showModelDownload = false
     @State private var showEngineInfo = false
-    @AppStorage("tts.defaultSteps") private var defaultSteps = 4
+    @AppStorage("tts.defaultSteps") private var defaultSteps = 8
 
     let isLocked: Bool
     @State private var selectedLanguage: String = "en"
@@ -71,14 +71,14 @@ struct VoicesView: View {
                             .padding(.horizontal, 4)
 
                             Picker("Synthesis Quality", selection: $defaultSteps) {
-                                Text("Fast").tag(2)
-                                Text("Balanced").tag(4)
-                                Text("High").tag(5)
-                                Text("Ultra").tag(8)
+                                Text("Balanced").tag(5)
+                                Text("High").tag(8)
+                                Text("Ultra").tag(12)
                             }
                             .pickerStyle(.segmented)
-                            .onChange(of: defaultSteps) { _, _ in
+                            .onChange(of: defaultSteps) { _, newValue in
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                appState.activeSession?.setSteps(newValue)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -266,7 +266,8 @@ struct VoicesView: View {
             samplePlayer.playSample(
                 for: voice,
                 synthesizer: appState.supertonicSynthesizer,
-                activeSession: appState.activeSession
+                activeSession: appState.activeSession,
+                steps: defaultSteps
             )
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -281,10 +282,10 @@ struct VoicesView: View {
 
     private func qualityName(for steps: Int) -> String {
         switch steps {
-        case 2: return "Fast Speed"
-        case 5: return "Studio Depth"
-        case 8: return "Ultra"
-        default: return "Balanced"
+        case 5: return "Balanced"
+        case 8: return "High"
+        case 12: return "Ultra"
+        default: return "High"
         }
     }
 }
@@ -604,7 +605,7 @@ final class VoiceSamplePlayer: NSObject, AVSpeechSynthesizerDelegate {
         return "Hello! I am \(voice.name). This is a preview of my voice in the Books App. Do you like my pronunciation?"
     }
 
-    func playSample(for voice: TTSVoice, synthesizer: SupertonicSynthesizer, activeSession: ReaderSession?) {
+    func playSample(for voice: TTSVoice, synthesizer: SupertonicSynthesizer, activeSession: ReaderSession?, steps: Int = 8) {
         // 1. Check if we are already playing this exact voice
         let alreadyPlayingSelected = (playingVoiceId == voice.id)
         
@@ -632,7 +633,7 @@ final class VoiceSamplePlayer: NSObject, AVSpeechSynthesizerDelegate {
         } else {
             // Premium Model-Generated Playback using actual Supertonic ONNX synthesizer
             let sampleText = getSampleText(for: voice)
-            let stream = synthesizer.synthesize(sampleText, voice: voice, options: SynthOptions())
+            let stream = synthesizer.synthesize(sampleText, voice: voice, options: SynthOptions(steps: steps))
             
             synthesisTask = Task {
                 do {
