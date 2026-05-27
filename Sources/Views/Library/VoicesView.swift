@@ -8,7 +8,8 @@ struct VoicesView: View {
     @State private var samplePlayer = VoiceSamplePlayer()
     @State private var showModelDownload = false
     @State private var showEngineInfo = false
-    
+    @AppStorage("tts.defaultSteps") private var defaultSteps = 4
+
     let isLocked: Bool
     @State private var selectedLanguage: String = "en"
 
@@ -56,6 +57,32 @@ struct VoicesView: View {
                     }
                     
                     if isSupertonicReady() {
+                        // Synthesis Quality Picker
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("Synthesis Quality")
+                                    .font(.j7SubheadlineSerifBold)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text(qualityName(for: defaultSteps))
+                                    .font(.j7CaptionBold)
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                            .padding(.horizontal, 4)
+
+                            Picker("Synthesis Quality", selection: $defaultSteps) {
+                                Text("Fast").tag(2)
+                                Text("Balanced").tag(4)
+                                Text("High").tag(5)
+                                Text("Ultra").tag(8)
+                            }
+                            .pickerStyle(.segmented)
+                            .onChange(of: defaultSteps) { _, _ in
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }
+                        }
+                        .padding(.horizontal, 16)
+
                         // Supertonic AI Voices Section
                         if !filteredSupertonicVoices.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
@@ -250,6 +277,15 @@ struct VoicesView: View {
             return true
         }
         return false
+    }
+
+    private func qualityName(for steps: Int) -> String {
+        switch steps {
+        case 2: return "Fast Speed"
+        case 5: return "Studio Depth"
+        case 8: return "Ultra"
+        default: return "Balanced"
+        }
     }
 }
 

@@ -35,6 +35,7 @@ struct ImportView: View {
                             Text("Fast").tag(2)
                             Text("Balanced").tag(4)
                             Text("High").tag(5)
+                            Text("Ultra").tag(8)
                         }
                         .pickerStyle(.segmented)
                         .onChange(of: defaultSteps) { _, _ in
@@ -134,6 +135,7 @@ struct ImportView: View {
         switch steps {
         case 2: return "Fast Speed"
         case 5: return "Studio Depth"
+        case 8: return "Ultra"
         default: return "Balanced"
         }
     }

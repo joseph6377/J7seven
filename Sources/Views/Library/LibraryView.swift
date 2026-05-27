@@ -282,11 +282,37 @@ struct LibraryView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
+    private var timeOfDayGreeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12: return "Good morning"
+        case 12..<17: return "Good afternoon"
+        default: return "Good evening"
+        }
+    }
+
+    private var deviceFirstName: String? {
+        let deviceName = UIDevice.current.name
+        // Device names are typically "Joseph's iPhone" or "Joseph's iPad"
+        if let apostropheRange = deviceName.range(of: "'s ") ?? deviceName.range(of: "\u{2019}s ") {
+            let firstName = String(deviceName[deviceName.startIndex..<apostropheRange.lowerBound])
+            if !firstName.isEmpty { return firstName }
+        }
+        return nil
+    }
+
+    private var greetingText: String {
+        if let name = deviceFirstName {
+            return "\(timeOfDayGreeting), \(name)"
+        }
+        return timeOfDayGreeting
+    }
+
     private var statsDashboard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Good evening, Joseph")
+                    Text(greetingText)
                         .font(.j7Title3Serif)
                         .foregroundStyle(.primary)
                     Text("Welcome to your sanctuary.")
