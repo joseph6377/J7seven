@@ -85,10 +85,21 @@ final class ReaderSession: ObservableObject {
         self.currentParagraphIndex = document.cursor.paragraphIndex
         
         let savedSteps = UserDefaults.standard.integer(forKey: "tts.defaultSteps")
-        self.steps = savedSteps > 0 ? savedSteps : 4
+        let validSteps = [5, 8, 12]
+        if validSteps.contains(savedSteps) {
+            self.steps = savedSteps
+        } else if savedSteps > 0 {
+            // Snap stale value to nearest valid step count
+            self.steps = validSteps.min(by: { abs($0 - savedSteps) < abs($1 - savedSteps) }) ?? 8
+        } else {
+            self.steps = 8
+        }
 
         // Setup callbacks on scheduler before playing
         setupCallbacks(on: scheduler)
+        if let synthSched = scheduler as? SynthScheduler {
+            synthSched.steps = self.steps
+        }
 
         // Load default voice if set in UserDefaults, otherwise fallback
         let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId")
@@ -299,6 +310,18 @@ final class ReaderSession: ObservableObject {
         self.voice = sanitizeVoice(voice, for: scheduler)
         if state == .playing {
             scheduler.advanceTo(cursor: document.cursor, voice: self.voice)
+        }
+    }
+
+    func setSteps(_ newSteps: Int) {
+        steps = newSteps
+        UserDefaults.standard.set(newSteps, forKey: "tts.defaultSteps")
+        if let synthSched = scheduler as? SynthScheduler {
+            synthSched.steps = newSteps
+        }
+        if state == .playing {
+            isBuffering = true
+            scheduler.advanceTo(cursor: document.cursor, voice: voice)
         }
     }
 

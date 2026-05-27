@@ -937,11 +937,14 @@ struct SettingsSheet: View {
                 if supertonicReady {
                     Section("Quality") {
                         Picker("Inference Steps", selection: $session.steps) {
-                            Text("Fast").tag(2)
-                            Text("Balanced").tag(4)
-                            Text("High").tag(5)
+                            Text("Balanced").tag(5)
+                            Text("High").tag(8)
+                            Text("Ultra").tag(12)
                         }
                         .pickerStyle(.segmented)
+                        .onChange(of: session.steps) { _, newValue in
+                            session.setSteps(newValue)
+                        }
                     }
                 }
             }

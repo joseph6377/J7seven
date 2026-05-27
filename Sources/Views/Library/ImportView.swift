@@ -4,7 +4,7 @@ struct ImportView: View {
     @Environment(AppState.self) private var appState
     let onUploadTap: () -> Void
 
-    @AppStorage("tts.defaultSteps") private var defaultSteps = 4
+    @AppStorage("tts.defaultSteps") private var defaultSteps = 8
     @State private var animatePortal = false
 
     var body: some View {
@@ -32,14 +32,14 @@ struct ImportView: View {
                         .padding(.horizontal, 4)
                         
                         Picker("Steps", selection: $defaultSteps) {
-                            Text("Fast").tag(2)
-                            Text("Balanced").tag(4)
-                            Text("High").tag(5)
-                            Text("Ultra").tag(8)
+                            Text("Balanced").tag(5)
+                            Text("High").tag(8)
+                            Text("Ultra").tag(12)
                         }
                         .pickerStyle(.segmented)
-                        .onChange(of: defaultSteps) { _, _ in
+                        .onChange(of: defaultSteps) { _, newValue in
                             UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            appState.activeSession?.setSteps(newValue)
                         }
                     }
                     
@@ -133,10 +133,10 @@ struct ImportView: View {
 
     private func qualityName(for steps: Int) -> String {
         switch steps {
-        case 2: return "Fast Speed"
-        case 5: return "Studio Depth"
-        case 8: return "Ultra"
-        default: return "Balanced"
+        case 5: return "Balanced"
+        case 8: return "High"
+        case 12: return "Ultra"
+        default: return "High"
         }
     }
 }

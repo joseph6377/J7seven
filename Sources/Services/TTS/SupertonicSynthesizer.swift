@@ -17,7 +17,7 @@ struct PCMChunk: Sendable {
 }
 
 struct SynthOptions: Sendable {
-    var steps: Int = 4          // Supertonic inference steps (2…5)
+    var steps: Int = 8          // Supertonic inference steps (5…12, default 8)
     var speed: Double = 1.0     // text-level; player-level scaling also possible
 }
 

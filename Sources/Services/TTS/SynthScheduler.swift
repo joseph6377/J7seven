@@ -35,6 +35,8 @@ final class SynthScheduler: PlaybackScheduler {
     private var scheduledCount: Int = 0
     private var firstAudioFired = false
 
+    var steps: Int = 8
+
     var onParagraphStartedPlaying: ((PlaybackCursor) -> Void)?
     var onFirstAudioReady: (() -> Void)?
     var onWordRangeChanged: ((NSRange) -> Void)?
@@ -167,7 +169,7 @@ final class SynthScheduler: PlaybackScheduler {
             let sentences = getSentencesAndRanges(from: text)
             let finalSentences = sentences.isEmpty ? [(text, NSRange(location: 0, length: text.utf16.count))] : sentences
 
-            let stream = synthesizer.synthesize(text, voice: voice, options: SynthOptions())
+            let stream = synthesizer.synthesize(text, voice: voice, options: SynthOptions(steps: steps))
 
             do {
                 var sentenceIdx = 0
@@ -231,6 +233,8 @@ final class SynthScheduler: PlaybackScheduler {
                     
                     sentenceIdx += 1
                 }
+            } catch is CancellationError {
+                break
             } catch {
                 print("[Scheduler] Synthesis error: \(error)")
                 self.onPlaybackError?(error)
