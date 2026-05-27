@@ -19,6 +19,7 @@ struct LibraryView: View {
     // File Import States for 2026 standards
     @State private var showFilePicker = false
     @State private var pendingImportURL: URL?
+    @State private var pendingEntry: LibraryEntry? = nil
     @State private var importErrorMessage = ""
     @State private var showImportError = false
     @State private var showAboutSheet = false
@@ -173,7 +174,9 @@ struct LibraryView: View {
                 }
             }
         }
-        .sheet(isPresented: $showModelDownload) {
+        .sheet(isPresented: $showModelDownload, onDismiss: {
+            pendingEntry = nil
+        }) {
             ModelDownloadView(
                 synthesizer: appState.supertonicSynthesizer,
                 onReady: {
@@ -181,11 +184,19 @@ struct LibraryView: View {
                     if let url = pendingImportURL {
                         Task { await importEpub(url: url); pendingImportURL = nil }
                     }
+                    if let entry = pendingEntry {
+                        appState.openDocument(entry)
+                        pendingEntry = nil
+                    }
                 },
                 onQuickStart: {
                     appState.selectedEngine = .apple
                     if let url = pendingImportURL {
                         Task { await importEpub(url: url); pendingImportURL = nil }
+                    }
+                    if let entry = pendingEntry {
+                        appState.openDocument(entry)
+                        pendingEntry = nil
                     }
                 }
             )
@@ -511,7 +522,7 @@ struct LibraryView: View {
         ], spacing: 28) {
             ForEach(books) { entry in
                 Button {
-                    appState.openDocument(entry)
+                    openOrDownload(entry)
                 } label: {
                     VStack(spacing: 10) {
                         CoverImageView(id: entry.id)
@@ -558,7 +569,7 @@ struct LibraryView: View {
         LazyVStack(spacing: 16) {
             ForEach(books) { entry in
                 Button {
-                    appState.openDocument(entry)
+                    openOrDownload(entry)
                 } label: {
                     BookRowCell(entry: entry)
                 }
@@ -594,6 +605,16 @@ struct LibraryView: View {
     }
 
     // MARK: - Helpers
+
+    private func openOrDownload(_ entry: LibraryEntry) {
+        if appState.selectedEngine == .supertonic,
+           case .notDownloaded = appState.supertonicSynthesizer.modelState {
+            pendingEntry = entry
+            showModelDownload = true
+        } else {
+            appState.openDocument(entry)
+        }
+    }
 
     private func loadFavorites() {
         let saved = UserDefaults.standard.string(forKey: "library.favorites") ?? ""
