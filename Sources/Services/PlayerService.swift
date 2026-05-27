@@ -11,6 +11,7 @@ final class PlayerService {
     var isPlaying: Bool = false
     private(set) var hasAudioData = false
     var playbackRate: Float = 1.0
+    private var wasPlayingBeforeInterruption = false
 
     private let nowPlayingQueue = DispatchQueue(label: "in.josepht.BooksApp.NowPlaying")
 
@@ -100,14 +101,16 @@ final class PlayerService {
 
     private func handleInterruption(type: AVAudioSession.InterruptionType, optionsValue: UInt?) {
         if type == .began {
+            wasPlayingBeforeInterruption = isPlaying
             pause()
         } else if type == .ended {
-            if let optionsValue = optionsValue {
+            if wasPlayingBeforeInterruption, let optionsValue = optionsValue {
                 let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
                 if options.contains(.shouldResume) {
                     play()
                 }
             }
+            wasPlayingBeforeInterruption = false
         }
     }
 
