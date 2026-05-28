@@ -112,8 +112,8 @@ struct AudioPlayerView: View {
                         let chapter = chapters[session.currentChapterIndex]
                         if currentParaIdx < chapter.paragraphs.count {
                             let para = chapter.paragraphs[currentParaIdx]
-                            if let range = session.activeWordRange, para.count > 0 {
-                                progress = Double(range.location) / Double(para.count)
+                            if let range = session.activeWordRange, para.text.count > 0 {
+                                progress = Double(range.location) / Double(para.text.count)
                             } else {
                                 progress = 0.0
                             }
@@ -156,9 +156,6 @@ struct AudioPlayerView: View {
                     }
                 }
                 .onChange(of: session.activeWordRange) { _, _ in
-                    checkAndCenterHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
-                }
-                .onChange(of: activeParagraphRect) { _, _ in
                     checkAndCenterHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
                 }
                 .onChange(of: session.state) { _, newState in
@@ -229,8 +226,8 @@ struct AudioPlayerView: View {
                                 let chapter = chapters[session.currentChapterIndex]
                                 if currentParaIdx < chapter.paragraphs.count {
                                     let para = chapter.paragraphs[currentParaIdx]
-                                    if let range = session.activeWordRange, para.count > 0 {
-                                        progress = Double(range.location) / Double(para.count)
+                                    if let range = session.activeWordRange, para.text.count > 0 {
+                                        progress = Double(range.location) / Double(para.text.count)
                                     } else {
                                         progress = 0.0
                                     }
@@ -317,9 +314,9 @@ struct AudioPlayerView: View {
 }
 
     @ViewBuilder
-    private func paragraphView(para: String, pIdx: Int, isCurrent: Bool) -> some View {
+    private func paragraphView(para: Paragraph, pIdx: Int, isCurrent: Bool) -> some View {
         if isCurrent {
-            let attributed = makeAttributedParagraph(para)
+            let attributed = makeAttributedParagraph(para.text)
             Text(attributed)
                 .font(.j7BookContent(size: appState.fontSize, weight: .medium))
                 .foregroundStyle(Color.primary)
@@ -352,7 +349,7 @@ struct AudioPlayerView: View {
                     showSettings = true
                 }
         } else {
-            Text(para)
+            Text(para.text)
                 .font(.j7BookContent(size: appState.fontSize))
                 .foregroundStyle(Color.primary.opacity(0.75))
                 .lineSpacing(6)
@@ -391,8 +388,8 @@ struct AudioPlayerView: View {
         let para = chapter.paragraphs[currentParaIdx]
         
         let progress: Double
-        if let range = session.activeWordRange, para.count > 0 {
-            progress = Double(range.location) / Double(para.count)
+        if let range = session.activeWordRange, para.text.count > 0 {
+            progress = Double(range.location) / Double(para.text.count)
         } else {
             progress = 0.0
         }
@@ -498,8 +495,8 @@ struct AudioPlayerView: View {
                     let chapter = chapters[session.currentChapterIndex]
                     if currentParaIdx < chapter.paragraphs.count {
                         let para = chapter.paragraphs[currentParaIdx]
-                        if let range = session.activeWordRange, para.count > 0 {
-                            progress = Double(range.location) / Double(para.count)
+                        if let range = session.activeWordRange, para.text.count > 0 {
+                            progress = Double(range.location) / Double(para.text.count)
                         } else {
                             progress = 0.0
                         }
@@ -786,19 +783,19 @@ struct AudioPlayerView: View {
         var totalChars = 0
         for ch in chapters {
             for para in ch.paragraphs {
-                totalChars += para.count
+                totalChars += para.text.count
             }
         }
         
         var elapsedChars = 0
         for chIdx in 0..<session.currentChapterIndex {
             for para in chapters[chIdx].paragraphs {
-                elapsedChars += para.count
+                elapsedChars += para.text.count
             }
         }
         let currentChapter = chapters[session.currentChapterIndex]
         for pIdx in 0..<session.currentParagraphIndex {
-            elapsedChars += currentChapter.paragraphs[pIdx].count
+            elapsedChars += currentChapter.paragraphs[pIdx].text.count
         }
         
         let totalSeconds = Double(totalChars) / charsPerSecond / Double(session.playbackRate)

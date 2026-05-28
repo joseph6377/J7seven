@@ -135,7 +135,7 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
                 continue
             }
 
-            let text = chapter.paragraphs[synthCursor.paragraphIndex]
+            let text = chapter.paragraphs[synthCursor.paragraphIndex].text
             let utterance = AVSpeechUtterance(string: text)
             utterance.voice = avVoice
             utterance.rate = rate

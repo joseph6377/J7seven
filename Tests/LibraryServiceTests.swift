@@ -29,8 +29,8 @@ final class LibraryServiceTests: XCTestCase {
             importedAt: Date(),
             lastOpenedAt: Date(),
             chapters: [
-                ChapterText(index: 0, title: "Chapter 1", paragraphs: ["Para 1", "Para 2"]),
-                ChapterText(index: 1, title: "Chapter 2", paragraphs: ["Para 3"])
+                ChapterText(index: 0, title: "Chapter 1", paragraphs: [Paragraph(text: "Para 1", pageNumber: nil), Paragraph(text: "Para 2", pageNumber: nil)]),
+                ChapterText(index: 1, title: "Chapter 2", paragraphs: [Paragraph(text: "Para 3", pageNumber: nil)])
             ],
             cursor: PlaybackCursor(chapterIndex: 0, paragraphIndex: 1)
         )
@@ -71,8 +71,8 @@ final class LibraryServiceTests: XCTestCase {
             importedAt: Date(),
             lastOpenedAt: Date(),
             chapters: [
-                ChapterText(index: 0, title: "Ch 1", paragraphs: ["P1", "P2"]),
-                ChapterText(index: 1, title: "Ch 2", paragraphs: ["P3", "P4", "P5"])
+                ChapterText(index: 0, title: "Ch 1", paragraphs: [Paragraph(text: "P1", pageNumber: nil), Paragraph(text: "P2", pageNumber: nil)]),
+                ChapterText(index: 1, title: "Ch 2", paragraphs: [Paragraph(text: "P3", pageNumber: nil), Paragraph(text: "P4", pageNumber: nil), Paragraph(text: "P5", pageNumber: nil)])
             ],
             cursor: PlaybackCursor(chapterIndex: 1, paragraphIndex: 1) // 3 paragraphs before, total 5
         )
@@ -97,7 +97,7 @@ final class LibraryServiceTests: XCTestCase {
             importedAt: Date(),
             lastOpenedAt: Date(),
             chapters: [
-                ChapterText(index: 0, title: "Ch 1", paragraphs: [paragraphText])
+                ChapterText(index: 0, title: "Ch 1", paragraphs: [Paragraph(text: paragraphText, pageNumber: nil)])
             ],
             cursor: PlaybackCursor(chapterIndex: 0, paragraphIndex: 0)
         )
@@ -122,8 +122,8 @@ final class LibraryServiceTests: XCTestCase {
             importedAt: Date(),
             lastOpenedAt: Date(),
             chapters: [
-                ChapterText(index: 0, title: "Ch 1", paragraphs: [paragraphText1, paragraphText2]),
-                ChapterText(index: 1, title: "Ch 2", paragraphs: [paragraphText3])
+                ChapterText(index: 0, title: "Ch 1", paragraphs: [Paragraph(text: paragraphText1, pageNumber: nil), Paragraph(text: paragraphText2, pageNumber: nil)]),
+                ChapterText(index: 1, title: "Ch 2", paragraphs: [Paragraph(text: paragraphText3, pageNumber: nil)])
             ],
             cursor: PlaybackCursor(chapterIndex: 0, paragraphIndex: 2) // both paragraphs of Chapter 0 read -> 150 words
         )

@@ -7,7 +7,7 @@ final class PlayerService {
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private let speedControl = AVAudioUnitTimePitch()
-    
+
     var isPlaying: Bool = false
     private(set) var hasAudioData = false
     var playbackRate: Float = 1.0
@@ -30,12 +30,12 @@ final class PlayerService {
     private func setupEngine() {
         engine.attach(playerNode)
         engine.attach(speedControl)
-        
+
         let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 44100, channels: 1, interleaved: false)!
-        
+
         engine.connect(playerNode, to: speedControl, format: format)
         engine.connect(speedControl, to: engine.mainMixerNode, format: format)
-        
+
         engine.prepare()
     }
 
@@ -82,14 +82,14 @@ final class PlayerService {
             try session.setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
             try session.setActive(true)
             print("[Player] Audio session active: category=\(session.category.rawValue)")
-            
+
             NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: nil) { [weak self] notification in
                 guard let userInfo = notification.userInfo,
                       let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
                       let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
-                
+
                 let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt
-                
+
                 Task { @MainActor in
                     self?.handleInterruption(type: type, optionsValue: optionsValue)
                 }
@@ -171,7 +171,7 @@ final class PlayerService {
     ) {
         let playing = isPlaying ?? self.isPlaying
         let rate = self.playbackRate
-        
+
         nowPlayingQueue.async {
             var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
             if let title { info[MPMediaItemPropertyTitle] = title }
@@ -187,7 +187,7 @@ final class PlayerService {
             }
             info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? Double(rate) : 0
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-            
+
             MPNowPlayingInfoCenter.default().playbackState = playing ? .playing : .paused
         }
     }

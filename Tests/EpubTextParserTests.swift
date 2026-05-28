@@ -42,14 +42,14 @@ final class EpubTextParserTests: XCTestCase {
         let ch1 = parsed.chapters[0]
         XCTAssertEqual(ch1.title, "Chapter 1") // Standard default titling
         XCTAssertEqual(ch1.paragraphs.count, 2)
-        XCTAssertEqual(ch1.paragraphs[0], "This is paragraph one of chapter one.")
-        XCTAssertEqual(ch1.paragraphs[1], "This is paragraph two of chapter one.")
+        XCTAssertEqual(ch1.paragraphs[0].text, "This is paragraph one of chapter one.")
+        XCTAssertEqual(ch1.paragraphs[1].text, "This is paragraph two of chapter one.")
         
         // Check Chapter 2 Content
         let ch2 = parsed.chapters[1]
         XCTAssertEqual(ch2.title, "Chapter 2")
         XCTAssertEqual(ch2.paragraphs.count, 1)
-        XCTAssertEqual(ch2.paragraphs[0], "This is paragraph one of chapter two.")
+        XCTAssertEqual(ch2.paragraphs[0].text, "This is paragraph one of chapter two.")
     }
 
     func testParseInvalidEpubMissingContainer() {

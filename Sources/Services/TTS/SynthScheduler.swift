@@ -163,7 +163,7 @@ final class SynthScheduler: PlaybackScheduler {
                 continue
             }
 
-            let text = chapter.paragraphs[synthCursor.paragraphIndex]
+            let text = chapter.paragraphs[synthCursor.paragraphIndex].text
             let currentLoopCursor = synthCursor
 
             let sentences = getSentencesAndRanges(from: text)

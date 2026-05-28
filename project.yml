@@ -58,6 +58,11 @@ targets:
             LSHandlerRank: Alternate
             LSItemContentTypes:
               - org.idpf.epub-container
+          - CFBundleTypeName: "PDF Document"
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.adobe.pdf
         UTImportedTypeDeclarations:
           - UTTypeIdentifier: org.idpf.epub-container
             UTTypeDescription: "EPUB Document"

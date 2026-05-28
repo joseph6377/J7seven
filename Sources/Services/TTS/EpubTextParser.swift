@@ -3,7 +3,7 @@ import Foundation
 /// A chapter extracted from a text-only EPUB (no media overlay required).
 struct EpubChapter {
     let title: String
-    let paragraphs: [String]   // plain text, one per <p>, empty strings removed
+    let paragraphs: [Paragraph]   // plain text, one per <p>, empty strings removed
 }
 
 enum EpubTextParserError: LocalizedError {
@@ -171,12 +171,13 @@ enum EpubTextParser {
     // MARK: - Plain text extraction
 
     /// Returns plain text for every non-empty <p> element in an XHTML document.
-    private static func extractParagraphs(from data: Data) -> [String] {
+    private static func extractParagraphs(from data: Data) -> [Paragraph] {
         let root = XMLIndexer(data: data)
         let allP = root.allDescendants.filter { $0.name == "p" || $0.name.hasSuffix(":p") }
         return allP
             .map { collectText($0) }
             .filter { !$0.isEmpty }
+            .map { Paragraph(text: $0, pageNumber: nil) }
     }
 
     // MARK: - Helpers (mirrors EpubParser internals)

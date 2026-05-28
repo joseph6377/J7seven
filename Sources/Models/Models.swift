@@ -1,6 +1,15 @@
 import Foundation
 import SwiftUI
 
+struct Paragraph: Codable, Equatable, Hashable {
+    let text: String
+    let pageNumber: Int?  // nil for EPUB, set for PDF
+}
+
+enum SourceFormat: String, Codable {
+    case epub, pdf
+}
+
 // Persisted (text + cursor only — no audio)
 struct SavedDocument: Codable, Identifiable {
     let id: UUID                  // stable ID, used as filename
@@ -11,12 +20,42 @@ struct SavedDocument: Codable, Identifiable {
     var lastOpenedAt: Date
     var chapters: [ChapterText]   // text only
     var cursor: PlaybackCursor
+    let sourceFormat: SourceFormat?
+    let pageCount: Int?
+
+    var format: SourceFormat {
+        sourceFormat ?? .epub
+    }
+
+    init(
+        id: UUID,
+        title: String,
+        author: String?,
+        coverImageData: Data?,
+        importedAt: Date,
+        lastOpenedAt: Date,
+        chapters: [ChapterText],
+        cursor: PlaybackCursor,
+        sourceFormat: SourceFormat? = .epub,
+        pageCount: Int? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.author = author
+        self.coverImageData = coverImageData
+        self.importedAt = importedAt
+        self.lastOpenedAt = lastOpenedAt
+        self.chapters = chapters
+        self.cursor = cursor
+        self.sourceFormat = sourceFormat
+        self.pageCount = pageCount
+    }
 }
 
 struct ChapterText: Codable, Identifiable {
     let index: Int
     let title: String
-    let paragraphs: [String]      // plain text, pre-split
+    let paragraphs: [Paragraph]      // plain text, pre-split
     
     var id: Int { index }
 }
@@ -63,11 +102,11 @@ extension LibraryEntry {
             } else if cIdx == doc.cursor.chapterIndex {
                 let remainingParagraphs = chapter.paragraphs.suffix(from: min(doc.cursor.paragraphIndex, chapter.paragraphs.count))
                 for paragraph in remainingParagraphs {
-                    remainingWords += paragraph.split(separator: " ").count
+                    remainingWords += paragraph.text.split(separator: " ").count
                 }
             } else {
                 for paragraph in chapter.paragraphs {
-                    remainingWords += paragraph.split(separator: " ").count
+                    remainingWords += paragraph.text.split(separator: " ").count
                 }
             }
         }
@@ -91,12 +130,12 @@ extension LibraryEntry {
         for (cIdx, chapter) in doc.chapters.enumerated() {
             if cIdx < doc.cursor.chapterIndex {
                 for paragraph in chapter.paragraphs {
-                    wordsRead += paragraph.split(separator: " ").count
+                    wordsRead += paragraph.text.split(separator: " ").count
                 }
             } else if cIdx == doc.cursor.chapterIndex {
                 let readParagraphs = chapter.paragraphs.prefix(min(doc.cursor.paragraphIndex, chapter.paragraphs.count))
                 for paragraph in readParagraphs {
-                    wordsRead += paragraph.split(separator: " ").count
+                    wordsRead += paragraph.text.split(separator: " ").count
                 }
             }
         }
@@ -159,7 +198,7 @@ extension SavedDocument {
         var count = 0
         for chapter in chapters {
             for paragraph in chapter.paragraphs {
-                sampleText += paragraph + " "
+                sampleText += paragraph.text + " "
                 count += 1
                 if count >= 6 { break }
             }

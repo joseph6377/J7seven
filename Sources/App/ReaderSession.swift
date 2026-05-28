@@ -36,7 +36,7 @@ final class ReaderSession: ObservableObject {
     var currentChapterDuration: Double {
         guard currentChapterIndex < document.chapters.count else { return 0.0 }
         let chapter = document.chapters[currentChapterIndex]
-        let totalChars = chapter.paragraphs.reduce(0) { $0 + $1.utf16.count }
+        let totalChars = chapter.paragraphs.reduce(0) { $0 + $1.text.utf16.count }
         return Double(totalChars) / 15.0
     }
 
@@ -44,7 +44,7 @@ final class ReaderSession: ObservableObject {
         guard currentChapterIndex < document.chapters.count else { return 0.0 }
         let chapter = document.chapters[currentChapterIndex]
         let elapsedParagraphs = chapter.paragraphs.prefix(currentParagraphIndex)
-        var elapsedChars = elapsedParagraphs.reduce(0) { $0 + $1.utf16.count }
+        var elapsedChars = elapsedParagraphs.reduce(0) { $0 + $1.text.utf16.count }
         if let activeRange = activeWordRange {
             elapsedChars += activeRange.location
         }
@@ -233,7 +233,7 @@ final class ReaderSession: ObservableObject {
                     foundCurrent = true
                     break
                 }
-                currentAbsoluteCharIndex += ch.paragraphs[pIdx].count
+                currentAbsoluteCharIndex += ch.paragraphs[pIdx].text.count
             }
             if foundCurrent { break }
         }
@@ -250,7 +250,7 @@ final class ReaderSession: ObservableObject {
         for cIdx in 0..<chapters.count {
             let ch = chapters[cIdx]
             for pIdx in 0..<ch.paragraphs.count {
-                let count = ch.paragraphs[pIdx].count
+                let count = ch.paragraphs[pIdx].text.count
                 if Double(accumulatedChars + count) >= targetAbsoluteCharIndex {
                     targetChapterIndex = cIdx
                     targetParagraphIndex = pIdx

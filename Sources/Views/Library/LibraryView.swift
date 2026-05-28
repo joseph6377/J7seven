@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum LibraryFilter: String, CaseIterable {
     case shelf = "All Books"
@@ -163,13 +164,13 @@ struct LibraryView: View {
             }
         }
         .fileImporter(isPresented: $showFilePicker,
-                      allowedContentTypes: [.epub],
+                      allowedContentTypes: [.epub, .pdf],
                       allowsMultipleSelection: false) { result in
             if case .success(let urls) = result, let url = urls.first {
                 Task {
                     if url.startAccessingSecurityScopedResource() {
                         defer { url.stopAccessingSecurityScopedResource() }
-                        await importEpub(url: url)
+                        await importBook(url: url)
                     }
                 }
             }
@@ -182,7 +183,7 @@ struct LibraryView: View {
                 onReady: {
                     appState.selectedEngine = .supertonic
                     if let url = pendingImportURL {
-                        Task { await importEpub(url: url); pendingImportURL = nil }
+                        Task { await importBook(url: url); pendingImportURL = nil }
                     }
                     if let entry = pendingEntry {
                         appState.openDocument(entry)
@@ -192,7 +193,7 @@ struct LibraryView: View {
                 onQuickStart: {
                     appState.selectedEngine = .apple
                     if let url = pendingImportURL {
-                        Task { await importEpub(url: url); pendingImportURL = nil }
+                        Task { await importBook(url: url); pendingImportURL = nil }
                     }
                     if let entry = pendingEntry {
                         appState.openDocument(entry)
@@ -655,7 +656,7 @@ struct LibraryView: View {
                 .font(.j7Title3Serif)
                 .padding(.bottom, 8)
 
-            Text("Import an EPUB to start reading aloud.")
+            Text("Import an EPUB or PDF to start reading aloud.")
                 .font(.j7Subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -747,7 +748,7 @@ struct LibraryView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.activeSession != nil && !appState.showPlayer)
     }
 
-    private func importEpub(url: URL) async {
+    private func importBook(url: URL) async {
         if appState.selectedEngine == .supertonic,
            case .notDownloaded = appState.supertonicSynthesizer.modelState {
             pendingImportURL = url
@@ -756,19 +757,40 @@ struct LibraryView: View {
         }
         
         do {
-            let parsed = try EpubTextParser.parse(epubURL: url)
-            let doc = SavedDocument(
-                id: UUID(),
-                title: parsed.title,
-                author: parsed.author,
-                coverImageData: parsed.coverData,
-                importedAt: Date(),
-                lastOpenedAt: Date(),
-                chapters: parsed.chapters.enumerated().map { idx, ch in
-                    ChapterText(index: idx, title: ch.title, paragraphs: ch.paragraphs)
-                },
-                cursor: PlaybackCursor()
-            )
+            let doc: SavedDocument
+            if url.pathExtension.lowercased() == "pdf" {
+                let parsed = try await PdfTextParser.parse(pdfURL: url)
+                doc = SavedDocument(
+                    id: UUID(),
+                    title: parsed.title,
+                    author: parsed.author,
+                    coverImageData: parsed.coverData,
+                    importedAt: Date(),
+                    lastOpenedAt: Date(),
+                    chapters: parsed.chapters.enumerated().map { idx, ch in
+                        ChapterText(index: idx, title: ch.title, paragraphs: ch.paragraphs)
+                    },
+                    cursor: PlaybackCursor(),
+                    sourceFormat: .pdf,
+                    pageCount: parsed.pageCount
+                )
+            } else {
+                let parsed = try EpubTextParser.parse(epubURL: url)
+                doc = SavedDocument(
+                    id: UUID(),
+                    title: parsed.title,
+                    author: parsed.author,
+                    coverImageData: parsed.coverData,
+                    importedAt: Date(),
+                    lastOpenedAt: Date(),
+                    chapters: parsed.chapters.enumerated().map { idx, ch in
+                        ChapterText(index: idx, title: ch.title, paragraphs: ch.paragraphs)
+                    },
+                    cursor: PlaybackCursor(),
+                    sourceFormat: .epub,
+                    pageCount: nil
+                )
+            }
             appState.libraryService.saveDocument(doc)
             appState.refresh()
             appState.openDocument(LibraryEntry(from: doc))
@@ -897,13 +919,13 @@ struct OnboardingCarouselView: View {
                         bodyText: "Welcome to a 100% offline, on-device reading experience. Let's take a quick 10-second tour of your library."
                     )
                     
-                    // Slide 2: Import EPUBs
+                    // Slide 2: Import EPUBs or PDFs
                     carouselSlide(
                         tag: 1,
                         illustration: importIllustration,
                         title: "Import Your Books",
-                        subtitle: "DRM-Free Ebooks Ready For Speech",
-                        bodyText: "Tap the floating blue '+' button in the bottom right corner of your library to import any DRM-free EPUB directly from your files."
+                        subtitle: "DRM-Free Ebooks & PDFs Ready For Speech",
+                        bodyText: "Tap the floating blue '+' button in the bottom right corner of your library to import any DRM-free EPUB or PDF directly from your files."
                     )
                     
                     // Slide 3: Personalize Voices
