@@ -49,7 +49,8 @@ final class LibraryService: @unchecked Sendable {
             chapters: sanitizedChapters,
             cursor: doc.cursor,
             sourceFormat: doc.sourceFormat,
-            pageCount: doc.pageCount
+            pageCount: doc.pageCount,
+            sourceURL: doc.sourceURL
         )
     }
 

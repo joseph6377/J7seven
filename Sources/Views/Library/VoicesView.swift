@@ -11,10 +11,12 @@ struct VoicesView: View {
     @AppStorage("tts.defaultSteps") private var defaultSteps = 8
 
     let isLocked: Bool
+    let showDoneButton: Bool
     @State private var selectedLanguage: String = "en"
 
-    init(isLocked: Bool = false) {
+    init(isLocked: Bool = false, showDoneButton: Bool = true) {
         self.isLocked = isLocked
+        self.showDoneButton = showDoneButton
     }
 
     private var supertonicVoices: [TTSVoice] { TTSVoice.loadAll() }
@@ -153,8 +155,10 @@ struct VoicesView: View {
             .navigationTitle("Voices")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                if showDoneButton {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {

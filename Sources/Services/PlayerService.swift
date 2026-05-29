@@ -37,6 +37,13 @@ final class PlayerService {
         engine.connect(speedControl, to: engine.mainMixerNode, format: format)
 
         engine.prepare()
+        
+        do {
+            try engine.start()
+            print("[Player] Audio engine started successfully in setupEngine")
+        } catch {
+            print("[Player] Audio engine failed to start in setupEngine: \(error)")
+        }
     }
 
     func schedule(_ buffer: AVAudioPCMBuffer, id: String, completion: @escaping @Sendable (String) -> Void) {
@@ -49,7 +56,20 @@ final class PlayerService {
     }
 
     func play() {
-        if !engine.isRunning { try? engine.start() }
+        if !engine.isRunning {
+            do {
+                try engine.start()
+                print("[Player] Audio engine started in play()")
+            } catch {
+                print("[Player] Audio engine failed to start in play(): \(error)")
+            }
+        }
+        
+        guard engine.isRunning else {
+            print("[Player] Cannot play - audio engine is not running and failed to start.")
+            return
+        }
+        
         playerNode.play()
         isPlaying = true
         updateNowPlaying()

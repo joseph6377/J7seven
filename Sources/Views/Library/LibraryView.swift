@@ -1,15 +1,17 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum LibraryFilter: String, CaseIterable {
-    case shelf = "All Books"
-    case favorites = "Favorites"
+enum LibraryTab {
+    case all
+    case byType
+    case favorites
 }
 
 
 struct LibraryView: View {
     @Environment(AppState.self) private var appState
-    @State private var selectedFilter: LibraryFilter = .shelf
+    @State private var selectedTab: LibraryTab = .all
+    @State private var activeTypeFilter: SourceFormat? = nil
     @State private var searchText = ""
     @State private var isSearchActive = false
     @State private var showModelDownload = false
@@ -17,15 +19,10 @@ struct LibraryView: View {
     @State private var favorites: Set<UUID> = Set()
     @State private var showStats = false
     
-    // File Import States for 2026 standards
-    @State private var showFilePicker = false
     @State private var pendingImportURL: URL?
     @State private var pendingEntry: LibraryEntry? = nil
-    @State private var importErrorMessage = ""
-    @State private var showImportError = false
     @State private var showAboutSheet = false
     @State private var showWelcomeDownload = false
-    @State private var showVoices = false
     @State private var showOnboardingCarousel = false
 
     // Computed list of books filtered by search query
@@ -96,10 +93,10 @@ struct LibraryView: View {
                         // Filter chips matching the new editorial style
                         filterChipsSection
 
-                        // Content area
+                        // Content area based on top filters
                         Group {
-                            switch selectedFilter {
-                            case .shelf:
+                            switch selectedTab {
+                            case .all:
                                 if filteredBooks.isEmpty {
                                     if !searchText.isEmpty {
                                         noResultsState
@@ -115,16 +112,55 @@ struct LibraryView: View {
                                 } else {
                                     bookContent(for: favoritedBooks)
                                 }
+                            case .byType:
+                                if let formatFilter = activeTypeFilter {
+                                    let formatFilteredBooks = filteredBooks.filter { $0.format == formatFilter }
+                                    VStack(spacing: 0) {
+                                        // Category drill-down title header with back button
+                                        HStack {
+                                            Button {
+                                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                                                    activeTypeFilter = nil
+                                                }
+                                            } label: {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "chevron.left")
+                                                    Text("Categories")
+                                                }
+                                                .font(.j7SubheadlineSemibold)
+                                                .foregroundStyle(Color.accentColor)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(Color.accentColor.opacity(0.08), in: Capsule())
+                                            }
+                                            .buttonStyle(.plain)
+                                            
+                                            Spacer()
+                                            
+                                            Text(categoryTitle(for: formatFilter))
+                                                .font(.j7SubheadlineSerifBold)
+                                                .foregroundStyle(.primary)
+                                        }
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 8)
+                                        .padding(.bottom, 4)
+                                        
+                                        if formatFilteredBooks.isEmpty {
+                                            emptyCategoryState(for: formatFilter)
+                                        } else {
+                                            bookContent(for: formatFilteredBooks)
+                                        }
+                                    }
+                                } else {
+                                    categoryListSection
+                                }
                             }
                         }
                     }
                 }
             }
             
-            // Premium Floating Action Button for importing books
-            floatingImportButton
-                .padding(.trailing, 20)
-                .padding(.bottom, 24)
         }
         .onAppear {
             appState.refresh()
@@ -163,18 +199,6 @@ struct LibraryView: View {
                 toolbarActions
             }
         }
-        .fileImporter(isPresented: $showFilePicker,
-                      allowedContentTypes: [.epub, .pdf],
-                      allowsMultipleSelection: false) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                Task {
-                    if url.startAccessingSecurityScopedResource() {
-                        defer { url.stopAccessingSecurityScopedResource() }
-                        await importBook(url: url)
-                    }
-                }
-            }
-        }
         .sheet(isPresented: $showModelDownload, onDismiss: {
             pendingEntry = nil
         }) {
@@ -182,9 +206,6 @@ struct LibraryView: View {
                 synthesizer: appState.supertonicSynthesizer,
                 onReady: {
                     appState.selectedEngine = .supertonic
-                    if let url = pendingImportURL {
-                        Task { await importBook(url: url); pendingImportURL = nil }
-                    }
                     if let entry = pendingEntry {
                         appState.openDocument(entry)
                         pendingEntry = nil
@@ -192,9 +213,6 @@ struct LibraryView: View {
                 },
                 onQuickStart: {
                     appState.selectedEngine = .apple
-                    if let url = pendingImportURL {
-                        Task { await importBook(url: url); pendingImportURL = nil }
-                    }
                     if let entry = pendingEntry {
                         appState.openDocument(entry)
                         pendingEntry = nil
@@ -202,11 +220,6 @@ struct LibraryView: View {
                 }
             )
             .preferredColorScheme(appState.selectedAppearance.colorScheme)
-        }
-        .alert("Import Failed", isPresented: $showImportError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(importErrorMessage)
         }
         .sheet(isPresented: $showAboutSheet) {
             AboutView()
@@ -231,10 +244,6 @@ struct LibraryView: View {
             .interactiveDismissDisabled()
             .preferredColorScheme(appState.selectedAppearance.colorScheme)
         }
-        .sheet(isPresented: $showVoices) {
-            VoicesView(isLocked: false)
-                .preferredColorScheme(appState.selectedAppearance.colorScheme)
-        }
         .onChange(of: showWelcomeDownload) { _, newValue in
             if !newValue {
                 let hasSeenShowcase = UserDefaults.standard.bool(forKey: "library.onboarding.showcased")
@@ -258,7 +267,7 @@ struct LibraryView: View {
                     .font(.j7SubheadlineSemibold)
                     .foregroundStyle(.secondary)
                 
-                TextField("Search audiobooks...", text: $searchText)
+                TextField("Search your library...", text: $searchText)
                     .font(.j7Subheadline)
                     .textFieldStyle(.plain)
                     .autocorrectionDisabled()
@@ -386,26 +395,9 @@ struct LibraryView: View {
 
     private var filterChipsSection: some View {
         HStack(spacing: 0) {
-            ForEach(LibraryFilter.allCases, id: \.self) { filter in
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                        selectedFilter = filter
-                    }
-                } label: {
-                    Text(filter.rawValue)
-                        .font(.j7SubheadlineSerifBold)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            selectedFilter == filter ? 
-                            Color.primary.opacity(0.06) : Color.clear
-                        )
-                        .foregroundStyle(selectedFilter == filter ? Color.primary : Color.primary.opacity(0.4))
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
+            filterButton(tab: .all, title: "All")
+            filterButton(tab: .byType, title: "By Type")
+            filterButton(tab: .favorites, title: "Favorites")
         }
         .padding(4)
         .background(Color.primary.opacity(0.02), in: Capsule())
@@ -413,6 +405,158 @@ struct LibraryView: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 12)
+    }
+    
+    private func filterButton(tab: LibraryTab, title: String) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                selectedTab = tab
+            }
+        } label: {
+            Text(title)
+                .font(.j7SubheadlineSerifBold)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .background(
+                    selectedTab == tab ? 
+                    Color.primary.opacity(0.06) : Color.clear
+                )
+                .foregroundStyle(selectedTab == tab ? Color.primary : Color.primary.opacity(0.4))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var categoryListSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(spacing: 0) {
+                categoryRow(
+                    title: "Web Articles",
+                    icon: "link",
+                    count: filteredBooks.filter { $0.format == .web }.count,
+                    format: .web
+                )
+                categoryRow(
+                    title: "EPUB Books",
+                    icon: "book",
+                    count: filteredBooks.filter { $0.format == .epub }.count,
+                    format: .epub
+                )
+                categoryRow(
+                    title: "PDF Documents",
+                    icon: "doc.text",
+                    count: filteredBooks.filter { $0.format == .pdf }.count,
+                    format: .pdf
+                )
+                categoryRow(
+                    title: "Pasted Text",
+                    icon: "doc.on.clipboard",
+                    count: filteredBooks.filter { $0.format == .pastedText }.count,
+                    format: .pastedText
+                )
+            }
+            .background(Color.primary.opacity(0.015))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 32)
+        }
+    }
+    
+    private func categoryRow(title: String, icon: String, count: Int, format: SourceFormat) -> some View {
+        VStack(spacing: 0) {
+            Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    activeTypeFilter = format
+                }
+            } label: {
+                HStack(spacing: 16) {
+                    Image(systemName: icon)
+                        .font(.body)
+                        .foregroundStyle(.primary.opacity(0.85))
+                        .frame(width: 24, height: 24)
+                    
+                    Text(title)
+                        .font(.j7BodyBold)
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    HStack(spacing: 8) {
+                        Text("\(count)")
+                            .font(.j7CaptionBold)
+                            .foregroundStyle(.secondary.opacity(0.8))
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary.opacity(0.4))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            if format != .pastedText {
+                Divider()
+                    .padding(.leading, 56)
+                    .background(Color.primary.opacity(0.03))
+            }
+        }
+    }
+
+    private func categoryTitle(for format: SourceFormat) -> String {
+        switch format {
+        case .epub: return "EPUB Books"
+        case .pdf: return "PDF Documents"
+        case .web: return "Web Articles"
+        case .pastedText: return "Pasted Text"
+        }
+    }
+
+    private func categoryIcon(for format: SourceFormat) -> String {
+        switch format {
+        case .epub: return "book.closed.fill"
+        case .pdf: return "doc.text.fill"
+        case .web: return "globe"
+        case .pastedText: return "doc.text.clipboard.fill"
+        }
+    }
+
+    private func categoryColor(for format: SourceFormat) -> Color {
+        switch format {
+        case .epub: return .orange
+        case .pdf: return .red
+        case .web: return .blue
+        case .pastedText: return .purple
+        }
+    }
+
+    private func emptyCategoryState(for format: SourceFormat) -> some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: categoryIcon(for: format))
+                .font(.system(size: 48))
+                .foregroundStyle(categoryColor(for: format).opacity(0.7))
+                .padding(.bottom, 8)
+            Text("No \(categoryTitle(for: format))")
+                .font(.j7Title3Serif)
+                .foregroundStyle(.primary)
+            Text("You haven't imported any items in this format yet.")
+                .font(.j7Caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Spacer()
+        }
+        .frame(minHeight: 350)
     }
 
     private var toolbarActions: some View {
@@ -433,17 +577,7 @@ struct LibraryView: View {
             }
             .buttonStyle(.plain)
 
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                showVoices = true
-            } label: {
-                Image(systemName: "waveform")
-                    .font(.j7SubheadlineBold)
-                    .foregroundStyle(Color.primary)
-                    .frame(width: 32, height: 32)
-                    .background(Color.primary.opacity(0.05), in: Circle())
-            }
-            .buttonStyle(.plain)
+
 
             Menu {
                 Picker("Appearance", selection: Bindable(appState).selectedAppearance) {
@@ -478,11 +612,25 @@ struct LibraryView: View {
         }
     }
 
-    private var shelfHeader: some View {
+    private func shelfHeader(for count: Int) -> some View {
         HStack {
-            Text(selectedFilter.rawValue)
-                .font(.j7SubheadlineSerifBold)
-                .foregroundStyle(.primary)
+            if selectedTab == .all {
+                Text("\(count) items")
+                    .font(.j7CaptionBold)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(1)
+            } else if selectedTab == .favorites {
+                Text("Favorites")
+                    .font(.j7SubheadlineSerifBold)
+                    .foregroundStyle(.primary)
+            } else if selectedTab == .byType {
+                Text("\(count) \(count == 1 ? "item" : "items")")
+                    .font(.j7CaptionBold)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(1)
+            }
             Spacer()
             
             Button {
@@ -505,7 +653,7 @@ struct LibraryView: View {
     @ViewBuilder
     private func bookContent(for books: [LibraryEntry]) -> some View {
         VStack(spacing: 0) {
-            shelfHeader
+            shelfHeader(for: books.count)
             
             if isGridView {
                 gridShelf(for: books)
@@ -646,7 +794,7 @@ struct LibraryView: View {
                 Circle()
                     .fill(Color.accentColor.opacity(0.05))
                     .frame(width: 190, height: 190)
-                Image(systemName: "book.closed")
+                Image(systemName: "waveform")
                     .font(.j7Hero)
                     .foregroundStyle(Color.accentColor.opacity(0.7))
             }
@@ -656,7 +804,7 @@ struct LibraryView: View {
                 .font(.j7Title3Serif)
                 .padding(.bottom, 8)
 
-            Text("Import an EPUB or PDF to start reading aloud.")
+            Text("Import a file, link, or text to start listening.")
                 .font(.j7Subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -728,78 +876,6 @@ struct LibraryView: View {
         .frame(minHeight: 450)
     }
 
-    private var floatingImportButton: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            showFilePicker = true
-        } label: {
-            Image(systemName: "plus")
-                .font(.j7Title2)
-                .foregroundStyle(.white)
-                .frame(width: 56, height: 56)
-                .background(
-                    Circle()
-                        .fill(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                )
-                .shadow(color: Color.accentColor.opacity(0.35), radius: 8, x: 0, y: 4)
-        }
-        .buttonStyle(.plain)
-        .padding(.bottom, appState.activeSession != nil && !appState.showPlayer ? 88 : 0)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.activeSession != nil && !appState.showPlayer)
-    }
-
-    private func importBook(url: URL) async {
-        if appState.selectedEngine == .supertonic,
-           case .notDownloaded = appState.supertonicSynthesizer.modelState {
-            pendingImportURL = url
-            showModelDownload = true
-            return
-        }
-        
-        do {
-            let doc: SavedDocument
-            if url.pathExtension.lowercased() == "pdf" {
-                let parsed = try await PdfTextParser.parse(pdfURL: url)
-                doc = SavedDocument(
-                    id: UUID(),
-                    title: parsed.title,
-                    author: parsed.author,
-                    coverImageData: parsed.coverData,
-                    importedAt: Date(),
-                    lastOpenedAt: Date(),
-                    chapters: parsed.chapters.enumerated().map { idx, ch in
-                        ChapterText(index: idx, title: ch.title, paragraphs: ch.paragraphs)
-                    },
-                    cursor: PlaybackCursor(),
-                    sourceFormat: .pdf,
-                    pageCount: parsed.pageCount
-                )
-            } else {
-                let parsed = try EpubTextParser.parse(epubURL: url)
-                doc = SavedDocument(
-                    id: UUID(),
-                    title: parsed.title,
-                    author: parsed.author,
-                    coverImageData: parsed.coverData,
-                    importedAt: Date(),
-                    lastOpenedAt: Date(),
-                    chapters: parsed.chapters.enumerated().map { idx, ch in
-                        ChapterText(index: idx, title: ch.title, paragraphs: ch.paragraphs)
-                    },
-                    cursor: PlaybackCursor(),
-                    sourceFormat: .epub,
-                    pageCount: nil
-                )
-            }
-            appState.libraryService.saveDocument(doc)
-            appState.refresh()
-            appState.openDocument(LibraryEntry(from: doc))
-        } catch {
-            print("[Import] Error: \(error)")
-            self.importErrorMessage = error.localizedDescription
-            self.showImportError = true
-        }
-    }
 }
 
 // MARK: - Book Row Cell
@@ -833,21 +909,29 @@ private struct BookRowCell: View {
                 let progressPercent = Int(round(entry.progress * 100))
                 
                 HStack(spacing: 6) {
-                    // Small custom micro-circular progress indicator
-                    ZStack {
-                        Circle()
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 2)
-                            .frame(width: 12, height: 12)
-                        Circle()
-                            .trim(from: 0, to: entry.progress)
-                            .stroke(Color.accentColor, lineWidth: 2)
-                            .frame(width: 12, height: 12)
-                            .rotationEffect(.degrees(-90))
+                    if entry.format == .pastedText {
+                        let words = entry.wordCount ?? 0
+                        let minutes = max(1, Int(round(Double(words) / 150.0)))
+                        Text("Pasted • \(words) words • ~\(minutes) min listen")
+                            .font(.j7Caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        // Small custom micro-circular progress indicator
+                        ZStack {
+                            Circle()
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 2)
+                                .frame(width: 12, height: 12)
+                            Circle()
+                                .trim(from: 0, to: entry.progress)
+                                .stroke(Color.accentColor, lineWidth: 2)
+                                .frame(width: 12, height: 12)
+                                .rotationEffect(.degrees(-90))
+                        }
+                        
+                        Text("\(progressPercent)% • \(entry.estimatedTimeLeft)")
+                            .font(.j7Caption)
+                            .foregroundStyle(.secondary)
                     }
-                    
-                    Text("\(progressPercent)% • \(entry.estimatedTimeLeft)")
-                        .font(.j7Caption)
-                        .foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1137,3 +1221,249 @@ struct OnboardingCarouselView: View {
         .frame(height: 180)
     }
 }
+
+// MARK: - URL Paste View (2026 Standards)
+
+struct URLPasteView: View {
+    @Binding var urlString: String
+    let onImport: (URL) -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text("Enter or paste the URL of any web article to extract its content for distraction-free offline audio playback.")
+                    .font(.j7Body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+                    .lineSpacing(4)
+                
+                HStack(spacing: 10) {
+                    Image(systemName: "link")
+                        .font(.j7BodyBold)
+                        .foregroundStyle(Color.accentColor)
+                    
+                    TextField("https://example.com/article", text: $urlString)
+                        .font(.j7Body)
+                        .textFieldStyle(.plain)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 16)
+                
+                Spacer()
+                
+                Button {
+                    let cleaned = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let url = URL(string: cleaned) {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        onImport(url)
+                    }
+                } label: {
+                    Text("Import Article")
+                        .font(.j7BodyBold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        )
+                        .shadow(color: Color.accentColor.opacity(0.25), radius: 6, x: 0, y: 3)
+                }
+                .disabled(URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)) == nil)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+            }
+            .navigationTitle("Import from URL")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - URL Import Progress View (2026 Standards)
+
+struct URLImportProgressView: View {
+    let url: URL
+    var payload: SharedPayload? = nil
+    let onComplete: (SavedDocument) -> Void
+    let onCancel: () -> Void
+    
+    @Environment(AppState.self) private var appState
+    @State private var progressState: ImportProgress = .fetching
+    @State private var errorMessage: String? = nil
+    @State private var importTask: Task<Void, Never>? = nil
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            if let error = errorMessage {
+                ZStack {
+                    Circle()
+                        .fill(Color.red.opacity(0.08))
+                        .frame(width: 80, height: 80)
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.j7Title2)
+                        .foregroundStyle(.red)
+                }
+                
+                Text("Import Failed")
+                    .font(.j7Title3Serif)
+                
+                Text(error)
+                    .font(.j7Subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .lineSpacing(3)
+                
+                Spacer()
+                
+                Button("OK") {
+                    onCancel()
+                }
+                .font(.j7BodyBold)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 14)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+                .buttonStyle(.plain)
+                .padding(.bottom, 32)
+                
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.08))
+                        .frame(width: 100, height: 100)
+                    
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .tint(Color.accentColor)
+                }
+                
+                VStack(spacing: 8) {
+                    Text(progressState.rawValue)
+                        .font(.j7Title3Serif)
+                        .contentTransition(.identity)
+                    
+                    Text(url.host ?? url.absoluteString)
+                        .font(.j7Caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+                
+                Button("Cancel") {
+                    importTask?.cancel()
+                    onCancel()
+                }
+                .font(.j7SubheadlineBold)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 32)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
+        .onAppear {
+            startImport()
+        }
+    }
+    
+    private func startImport() {
+        importTask = Task {
+            do {
+                var htmlContent: String? = nil
+                var preExtractedJsonLd: [String]? = nil
+                
+                if let payload = payload {
+                    htmlContent = payload.renderedHtml
+                    preExtractedJsonLd = payload.jsonLd
+                    print("[URLImportProgressView] Using pre-rendered HTML and JSON-LD from share extension payload.")
+                } else if let sharedPayload = readSharedPayload(), sharedPayload.url == url.absoluteString {
+                    htmlContent = sharedPayload.html
+                    print("[URLImportProgressView] Found shared paywall-bypassed HTML in App Group shared container.")
+                    deleteSharedPayload()
+                }
+                
+                let parsed = try await WebArticleImporter.importArticle(
+                    from: url,
+                    htmlContent: htmlContent,
+                    preRenderedHtml: htmlContent,
+                    preExtractedJsonLd: preExtractedJsonLd
+                ) { progress in
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        self.progressState = progress
+                    }
+                }
+                
+                let doc = SavedDocument(
+                    id: UUID(),
+                    title: parsed.title,
+                    author: parsed.author,
+                    coverImageData: parsed.coverData,
+                    importedAt: Date(),
+                    lastOpenedAt: Date(),
+                    chapters: parsed.chapters.enumerated().map { idx, ch in
+                        ChapterText(index: idx, title: ch.title, paragraphs: ch.paragraphs)
+                    },
+                    cursor: PlaybackCursor(),
+                    sourceFormat: .web,
+                    pageCount: nil,
+                    sourceURL: parsed.sourceURL
+                )
+                
+                appState.libraryService.saveDocument(doc)
+                onComplete(doc)
+            } catch {
+                if !Task.isCancelled {
+                    print("[URLImportProgressView] Error: \(error)")
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        self.errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
+    }
+    
+    private struct SharedImportPayload: Codable {
+        let url: String
+        let html: String?
+    }
+    
+    private func readSharedPayload() -> SharedImportPayload? {
+        guard let sharedContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.josephti.J7") else {
+            return nil
+        }
+        let payloadURL = sharedContainer.appendingPathComponent("import_payload.json")
+        guard let data = try? Data(contentsOf: payloadURL) else { return nil }
+        return try? JSONDecoder().decode(SharedImportPayload.self, from: data)
+    }
+    
+    private func deleteSharedPayload() {
+        guard let sharedContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.josephti.J7") else {
+            return
+        }
+        let payloadURL = sharedContainer.appendingPathComponent("import_payload.json")
+        try? FileManager.default.removeItem(at: payloadURL)
+    }
+}
+
+struct IdentifiableURL: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+

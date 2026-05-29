@@ -7,7 +7,7 @@ struct Paragraph: Codable, Equatable, Hashable {
 }
 
 enum SourceFormat: String, Codable {
-    case epub, pdf
+    case epub, pdf, web, pastedText
 }
 
 // Persisted (text + cursor only — no audio)
@@ -22,6 +22,7 @@ struct SavedDocument: Codable, Identifiable {
     var cursor: PlaybackCursor
     let sourceFormat: SourceFormat?
     let pageCount: Int?
+    let sourceURL: URL?
 
     var format: SourceFormat {
         sourceFormat ?? .epub
@@ -37,7 +38,8 @@ struct SavedDocument: Codable, Identifiable {
         chapters: [ChapterText],
         cursor: PlaybackCursor,
         sourceFormat: SourceFormat? = .epub,
-        pageCount: Int? = nil
+        pageCount: Int? = nil,
+        sourceURL: URL? = nil
     ) {
         self.id = id
         self.title = title
@@ -49,6 +51,7 @@ struct SavedDocument: Codable, Identifiable {
         self.cursor = cursor
         self.sourceFormat = sourceFormat
         self.pageCount = pageCount
+        self.sourceURL = sourceURL
     }
 }
 
@@ -74,6 +77,8 @@ struct LibraryEntry: Codable, Identifiable, Hashable {
     let progress: Double
     let estimatedTimeLeft: String
     let durationRead: Double
+    let format: SourceFormat?
+    let wordCount: Int?
 }
 
 extension LibraryEntry {
@@ -82,6 +87,15 @@ extension LibraryEntry {
         title = doc.title
         author = doc.author
         lastOpenedAt = doc.lastOpenedAt
+        format = doc.format
+
+        var totalWords = 0
+        for chapter in doc.chapters {
+            for paragraph in chapter.paragraphs {
+                totalWords += paragraph.text.split(separator: " ").count
+            }
+        }
+        wordCount = totalWords
 
         // Calculate progress based on paragraphs
         let totalParagraphs = doc.chapters.reduce(0) { $0 + $1.paragraphs.count }

@@ -5,6 +5,7 @@ struct CoverImageView: View {
     let id: UUID
     @State private var coverData: Data?
     @State private var bookTitle: String = ""
+    @State private var format: SourceFormat? = nil
 
     // Deterministic gradient per book based on title hash
     private var placeholderGradient: LinearGradient {
@@ -41,6 +42,13 @@ struct CoverImageView: View {
                 Image(uiImage: img)
                     .resizable()
                     .scaledToFill()
+            } else if format == .pastedText {
+                ZStack {
+                    Color.accentColor.opacity(0.08)
+                    Image(systemName: "doc.text")
+                        .font(.j7TitleLarge)
+                        .foregroundStyle(Color.accentColor)
+                }
             } else {
                 placeholderGradient
                     .overlay(
@@ -63,6 +71,7 @@ struct CoverImageView: View {
             if let doc = appState.libraryService.loadDocument(id: id) {
                 coverData = doc.coverImageData
                 bookTitle = doc.title
+                format = doc.format
             }
         }
     }

@@ -762,16 +762,32 @@ struct AudioPlayerView: View {
     }
 
     private var overallProgress: Double {
-        guard !session.document.chapters.isEmpty else { return 0.0 }
-        let totalChapters = Double(session.document.chapters.count)
-        let currentChapter = Double(session.currentChapterIndex)
-        let chapterWeight = 1.0 / totalChapters
+        let chapters = session.document.chapters
+        guard !chapters.isEmpty else { return 0.0 }
         
-        let currentChapterParagraphs = Double(session.document.chapters[session.currentChapterIndex].paragraphs.count)
-        let currentParagraph = Double(session.currentParagraphIndex)
-        let paragraphProgress = currentChapterParagraphs > 0 ? (currentParagraph / currentChapterParagraphs) : 0.0
+        var totalChars = 0
+        for ch in chapters {
+            for para in ch.paragraphs {
+                totalChars += para.text.count
+            }
+        }
+        guard totalChars > 0 else { return 0.0 }
         
-        return (currentChapter / totalChapters) + (paragraphProgress * chapterWeight)
+        var elapsedChars = 0
+        for chIdx in 0..<session.currentChapterIndex {
+            for para in chapters[chIdx].paragraphs {
+                elapsedChars += para.text.count
+            }
+        }
+        let currentChapter = chapters[session.currentChapterIndex]
+        for pIdx in 0..<session.currentParagraphIndex {
+            elapsedChars += currentChapter.paragraphs[pIdx].text.count
+        }
+        if let range = session.activeWordRange, range.location != NSNotFound {
+            elapsedChars += range.location
+        }
+        
+        return Double(elapsedChars) / Double(totalChars)
     }
 
     private var bookTimingStats: (elapsed: String, remaining: String, total: String) {
@@ -796,6 +812,9 @@ struct AudioPlayerView: View {
         let currentChapter = chapters[session.currentChapterIndex]
         for pIdx in 0..<session.currentParagraphIndex {
             elapsedChars += currentChapter.paragraphs[pIdx].text.count
+        }
+        if let range = session.activeWordRange, range.location != NSNotFound {
+            elapsedChars += range.location
         }
         
         let totalSeconds = Double(totalChars) / charsPerSecond / Double(session.playbackRate)
