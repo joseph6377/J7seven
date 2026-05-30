@@ -15,7 +15,7 @@ struct LibraryView: View {
     @State private var searchText = ""
     @State private var isSearchActive = false
     @State private var showModelDownload = false
-    @State private var isGridView = true
+    @AppStorage("library.isGridView") private var isGridView = false
     @State private var favorites: Set<UUID> = Set()
     @State private var showStats = false
     
@@ -48,6 +48,9 @@ struct LibraryView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
+            Color.j7AppBackground
+                .ignoresSafeArea()
+
             VStack(spacing: 0) {
                 if isSearchActive {
                     searchField
@@ -365,8 +368,12 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 12))
-                
+                .background(Color.j7Surface, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.j7Border, lineWidth: 0.5)
+                )
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text("100% Offline")
                         .font(.j7Title2)
@@ -377,7 +384,11 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.02), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color.j7Surface, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.j7Border, lineWidth: 0.5)
+                )
             }
         }
         .padding(16)
@@ -400,8 +411,8 @@ struct LibraryView: View {
             filterButton(tab: .favorites, title: "Favorites")
         }
         .padding(4)
-        .background(Color.primary.opacity(0.02), in: Capsule())
-        .overlay(Capsule().stroke(Color.primary.opacity(0.05), lineWidth: 0.5))
+        .background(Color.primary.opacity(0.04), in: Capsule())
+        .overlay(Capsule().stroke(Color.j7Border, lineWidth: 0.5))
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 12)
@@ -419,8 +430,12 @@ struct LibraryView: View {
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
                 .background(
-                    selectedTab == tab ? 
-                    Color.primary.opacity(0.06) : Color.clear
+                    Capsule()
+                        .fill(selectedTab == tab ? Color.j7Surface : Color.clear)
+                        .shadow(
+                            color: selectedTab == tab ? Color.black.opacity(0.08) : Color.clear,
+                            radius: 3, x: 0, y: 1
+                        )
                 )
                 .foregroundStyle(selectedTab == tab ? Color.primary : Color.primary.opacity(0.4))
                 .clipShape(Capsule())
@@ -456,11 +471,11 @@ struct LibraryView: View {
                     format: .pastedText
                 )
             }
-            .background(Color.primary.opacity(0.015))
+            .background(Color.j7Surface)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+                    .stroke(Color.j7Border, lineWidth: 1)
             )
             .padding(.horizontal, 16)
             .padding(.top, 16)
@@ -491,8 +506,14 @@ struct LibraryView: View {
                     HStack(spacing: 8) {
                         Text("\(count)")
                             .font(.j7CaptionBold)
-                            .foregroundStyle(.secondary.opacity(0.8))
-                        
+                            .foregroundStyle(count > 0 ? Color.accentColor : .secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule()
+                                    .fill(count > 0 ? Color.accentColor.opacity(0.1) : Color.primary.opacity(0.05))
+                            )
+
                         Image(systemName: "chevron.right")
                             .font(.footnote)
                             .foregroundStyle(.secondary.opacity(0.4))
@@ -507,7 +528,7 @@ struct LibraryView: View {
             if format != .pastedText {
                 Divider()
                     .padding(.leading, 56)
-                    .background(Color.primary.opacity(0.03))
+                    .background(Color.j7Border)
             }
         }
     }
@@ -689,6 +710,14 @@ struct LibraryView: View {
                             if let author = entry.author {
                                 Text(author)
                                     .font(.j7Caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            if entry.format != .pastedText {
+                                let progressPercent = Int(round(entry.progress * 100))
+                                Text("\(progressPercent)% • \(entry.estimatedTimeLeft)")
+                                    .font(.j7Caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }

@@ -36,16 +36,25 @@ private struct MiniPlayerContent: View {
                 } label: {
                     HStack(spacing: 10) {
                         CoverImageView(id: session.document.id)
-                            .frame(width: 38, height: 38)
+                            .frame(width: 34, height: 34)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 1)
 
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(session.document.title)
-                                .font(.j7SubheadlineSerifBold)
-                                .lineLimit(1)
-                                .foregroundStyle(.primary)
-                            
+                            HStack(spacing: 6) {
+                                Text(session.document.title)
+                                    .font(.j7SubheadlineSerifBold)
+                                    .lineLimit(1)
+                                    .foregroundStyle(.primary)
+
+                                if isPlaying {
+                                    MicroWaveformVisualizer(isPlaying: true)
+                                        .scaleEffect(0.6)
+                                        .frame(height: 16)
+                                        .transition(.opacity)
+                                }
+                            }
+
                             Text(session.document.chapters[session.currentChapterIndex].title)
                                 .font(.j7CaptionMedium)
                                 .lineLimit(1)
@@ -68,7 +77,7 @@ private struct MiniPlayerContent: View {
                         Image(systemName: "gobackward.30")
                             .font(.j7BodyMedium)
                             .foregroundStyle(Color.primary.opacity(0.75))
-                            .frame(width: 32, height: 32)
+                            .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Rewind 30 seconds")
@@ -106,14 +115,14 @@ private struct MiniPlayerContent: View {
                         Image(systemName: "goforward.30")
                             .font(.j7BodyMedium)
                             .foregroundStyle(Color.primary.opacity(0.75))
-                            .frame(width: 32, height: 32)
+                            .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Skip 30 seconds")
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
 
             // Premium Liquid Glass bottom progress bar clipped to corner radius
             GeometryReader { geo in

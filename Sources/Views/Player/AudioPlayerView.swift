@@ -519,13 +519,13 @@ struct AudioPlayerView: View {
             } label: {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(session.document.title)
-                        .font(.j7SubheadlineSerifBold)
+                        .font(.j7Title3Serif)
                         .lineLimit(1)
                         .foregroundStyle(Color.primary)
-                    
+
                     let chapter = session.document.chapters[session.currentChapterIndex]
                     Text("Chapter \(session.currentChapterIndex + 1): \(chapter.title)")
-                        .font(.j7Caption2Bold)
+                        .font(.j7Subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -570,20 +570,41 @@ struct AudioPlayerView: View {
                 }
                 .frame(height: 4)
                 .padding(.horizontal, 20)
-                
+
+                // Human-readable progress summary
+                HStack(spacing: 8) {
+                    Text("\(Int(round(progress * 100)))% Complete")
+                        .font(.j7CaptionMedium)
+                        .foregroundStyle(.secondary)
+
+                    if session.state == .playing {
+                        MicroWaveformVisualizer(isPlaying: true)
+                            .scaleEffect(0.55)
+                            .frame(height: 14)
+                            .transition(.opacity)
+                    }
+
+                    Spacer()
+
+                    Text("\(stats.remainingHuman) Remaining")
+                        .font(.j7CaptionMedium)
+                        .foregroundStyle(Color.accentColor)
+                }
+                .padding(.horizontal, 20)
+
                 HStack {
                     Text(stats.elapsed)
                         .font(.j7Caption)
                         .foregroundStyle(.secondary)
-                    
+
                     Spacer()
-                    
+
                     Text(stats.remaining)
                         .font(.j7CaptionSerifBold)
                         .foregroundStyle(Color.primary)
-                    
+
                     Spacer()
-                    
+
                     Text(stats.total)
                         .font(.j7Caption)
                         .foregroundStyle(.secondary)
@@ -726,12 +747,19 @@ struct AudioPlayerView: View {
                     showVoices = true
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 } label: {
-                    Text(session.voice.name)
-                        .font(.j7SubheadlineSerifBold)
-                        .foregroundStyle(Color.primary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 6)
-                        .background(Color.primary.opacity(0.06), in: Capsule())
+                    HStack(spacing: 7) {
+                        Image(systemName: "waveform")
+                            .font(.j7Caption)
+                            .foregroundStyle(Color.accentColor)
+                        Text(session.voice.name)
+                            .font(.j7SubheadlineSerifBold)
+                            .foregroundStyle(Color.primary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 7)
+                    .background(Color.j7Surface, in: Capsule())
+                    .overlay(Capsule().stroke(Color.j7Border, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 1)
                 }
                 .buttonStyle(.plain)
                 
@@ -756,7 +784,7 @@ struct AudioPlayerView: View {
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.primary.opacity(colorScheme == .dark ? 0.15 : 0.08), lineWidth: 0.5)
+                .stroke(Color.j7Border, lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.08), radius: 15, x: 0, y: 10)
     }
@@ -790,9 +818,9 @@ struct AudioPlayerView: View {
         return Double(elapsedChars) / Double(totalChars)
     }
 
-    private var bookTimingStats: (elapsed: String, remaining: String, total: String) {
+    private var bookTimingStats: (elapsed: String, remaining: String, total: String, remainingHuman: String) {
         let chapters = session.document.chapters
-        guard !chapters.isEmpty else { return ("0:00", "0:00", "0:00") }
+        guard !chapters.isEmpty else { return ("0:00", "0:00", "0:00", "0m") }
         
         let charsPerSecond = 15.0 // Average reading speed
         
@@ -824,7 +852,8 @@ struct AudioPlayerView: View {
         return (
             formatSeconds(elapsedSeconds),
             formatSecondsLong(remainingSeconds) + " left",
-            formatSeconds(totalSeconds)
+            formatSeconds(totalSeconds),
+            formatSecondsLong(remainingSeconds)
         )
     }
 

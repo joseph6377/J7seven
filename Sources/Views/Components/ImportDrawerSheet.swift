@@ -26,7 +26,7 @@ struct ImportDrawerSheet: View {
                 VStack(spacing: 0) {
                     drawerRow(
                         title: "From File",
-                        subtitle: "Import standard EPUB books or PDF documents",
+                        subtitle: "Import EPUB or PDF files",
                         icon: "doc",
                         action: onSelectFile
                     )
@@ -37,7 +37,7 @@ struct ImportDrawerSheet: View {
                     
                     drawerRow(
                         title: "From URL",
-                        subtitle: "Parse and listen to any web link",
+                        subtitle: "Convert any web article to audio",
                         icon: "link",
                         action: onSelectURL
                     )
@@ -48,16 +48,16 @@ struct ImportDrawerSheet: View {
                     
                     drawerRow(
                         title: "Paste Text",
-                        subtitle: "Paste prose directly and listen instantly",
+                        subtitle: "Paste text and start listening",
                         icon: "doc.on.clipboard",
                         action: onSelectPasteText
                     )
                 }
-                .background(Color.primary.opacity(0.015))
+                .background(Color.j7Surface)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+                        .stroke(Color.j7Border, lineWidth: 1)
                 )
             }
             .padding(.horizontal, 16)

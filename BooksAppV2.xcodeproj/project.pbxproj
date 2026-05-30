@@ -21,6 +21,7 @@
 		3DD2B891BDF9AD61CBA265BD /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1C7CA8E932CD5688E3177F /* AppState.swift */; };
 		43ADFD6BAEF03E393C5AF129 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90AD74C6115DC3E8B7851FC1 /* Models.swift */; };
 		44F890ECA7FFA86D7A7D6377 /* Font+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE01AAD2C39105AE0380A5A8 /* Font+Theme.swift */; };
+		44F890ECA7FFA86D7A7D6378 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE01AAD2C39105AE0380A5A9 /* Theme.swift */; };
 		454D85319CAA8A5B2968D805 /* PdfGeometricExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74214DC1CDC781FAB1D3954C /* PdfGeometricExtractor.swift */; };
 		47D667AFA4A38977722297C0 /* SharePreprocessor.js in Resources */ = {isa = PBXBuildFile; fileRef = EBD3451DCCA48F6BA1D91E6F /* SharePreprocessor.js */; };
 		4880D4F4DB790B80222C3130 /* SentenceChunker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A9506AF61422634A69EED7 /* SentenceChunker.swift */; };
@@ -131,7 +132,7 @@
 		7B1C7CA8E932CD5688E3177F /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		7EA9AA7468F79066C83060A7 /* WebArticleImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebArticleImporter.swift; sourceTree = "<group>"; };
 		7F830A1A4A73E8F5BC2139B3 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
-		83B5BECA1EAA99295D33780A /* J7ShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = J7ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		83B5BECA1EAA99295D33780A /* J7ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = J7ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		89A618B5CFD8A7E12C6C0C8E /* SupertonicSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupertonicSynthesizer.swift; sourceTree = "<group>"; };
 		8A5987A3382761967C2AA659 /* WelcomeModelDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeModelDownloadView.swift; sourceTree = "<group>"; };
 		8DD4AAB8D5FF3CFE1D595AF8 /* XMLIndexerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMLIndexerTests.swift; sourceTree = "<group>"; };
@@ -147,7 +148,7 @@
 		BDD32908E045FD87B70E1C50 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C6D227184208A1D7133D347A /* TTSEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSEngine.swift; sourceTree = "<group>"; };
 		CD0BF5EB61BA8CB684C18289 /* PlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerService.swift; sourceTree = "<group>"; };
-		D3733D82D9C509FB55AB2661 /* BooksAppV2.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BooksAppV2.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D3733D82D9C509FB55AB2661 /* BooksAppV2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BooksAppV2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB7634AD4B842D8591081DD7 /* EpubTextParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubTextParserTests.swift; sourceTree = "<group>"; };
 		DEAB5E54AEBAEE7318FBBE4F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		E253089A6309D6DB27824CDF /* ImportDrawerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportDrawerSheet.swift; sourceTree = "<group>"; };
@@ -156,8 +157,9 @@
 		EBD3451DCCA48F6BA1D91E6F /* SharePreprocessor.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = SharePreprocessor.js; sourceTree = "<group>"; };
 		F0A9506AF61422634A69EED7 /* SentenceChunker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceChunker.swift; sourceTree = "<group>"; };
 		F4E3E1998CD824CBF0E654F8 /* HtmlFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HtmlFetcher.swift; sourceTree = "<group>"; };
-		FB863B351F2A8ECAF1832B0E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		FB863B351F2A8ECAF1832B0E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FE01AAD2C39105AE0380A5A8 /* Font+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Font+Theme.swift"; sourceTree = "<group>"; };
+		FE01AAD2C39105AE0380A5A9 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -257,6 +259,7 @@
 				7B1C7CA8E932CD5688E3177F /* AppState.swift */,
 				2447D10E0EB282F1AB99CA37 /* BooksAppV2.swift */,
 				FE01AAD2C39105AE0380A5A8 /* Font+Theme.swift */,
+				FE01AAD2C39105AE0380A5A9 /* Theme.swift */,
 				01957373D942D8C9D515C3D3 /* ReaderSession.swift */,
 			);
 			path = App;
@@ -450,11 +453,9 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					53716FA24BE98C89B28598BC = {
-						DevelopmentTeam = 537JMFBG2B;
 						ProvisioningStyle = Automatic;
 					};
 					833E61D354461E0307498501 = {
-						DevelopmentTeam = 537JMFBG2B;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -540,6 +541,7 @@
 				15C62ABA522B9038C7EA99D3 /* CoverImageView.swift in Sources */,
 				1D123A85EBC4AAFA6975DEFF /* EpubTextParser.swift in Sources */,
 				44F890ECA7FFA86D7A7D6377 /* Font+Theme.swift in Sources */,
+				44F890ECA7FFA86D7A7D6378 /* Theme.swift in Sources */,
 				864342A0151364D5988FDE51 /* HtmlFetcher.swift in Sources */,
 				2D65C59C21A9884D8693FF64 /* ImportDrawerSheet.swift in Sources */,
 				D1BB96A122B0A759FC83F0E3 /* ImportView.swift in Sources */,
@@ -764,7 +766,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
-				DEVELOPMENT_TEAM = 537JMFBG2B;
+				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = BooksAppV2/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -787,7 +789,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
-				DEVELOPMENT_TEAM = 537JMFBG2B;
+				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = BooksAppV2/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -807,7 +809,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Sources/Services/Web/ShareExtension/J7ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 537JMFBG2B;
+				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = Sources/Services/Web/ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -845,7 +847,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Sources/Services/Web/ShareExtension/J7ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 537JMFBG2B;
+				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = Sources/Services/Web/ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
