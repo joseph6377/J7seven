@@ -205,7 +205,7 @@ struct ContentView: View {
                 onSelectURL: { showURLImport = true },
                 onSelectPasteText: { showPasteSheet = true }
             )
-            .presentationDetents([.fraction(0.35), .medium])
+            .presentationDetents([.fraction(0.30), .medium])
             .preferredColorScheme(appState.selectedAppearance.colorScheme)
         }
         .preferredColorScheme(appState.selectedAppearance.colorScheme)
@@ -232,7 +232,7 @@ struct ContentView: View {
                     Image(systemName: "plus")
                         .font(.title2)
                         .foregroundStyle(.white)
-                        .frame(width: 48, height: 48)
+                        .frame(width: 42, height: 42)
                         .background(
                             Circle()
                                 .fill(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -295,7 +295,7 @@ struct ContentView: View {
                     importedAt: Date(),
                     lastOpenedAt: Date(),
                     chapters: parsed.chapters.enumerated().map { idx, ch in
-                        ChapterText(index: idx, title: ch.title, paragraphs: ch.paragraphs)
+                        ChapterText.withSpokenTitle(index: idx, title: ch.title, paragraphs: ch.paragraphs)
                     },
                     cursor: PlaybackCursor(),
                     sourceFormat: .pdf,
@@ -311,7 +311,7 @@ struct ContentView: View {
                     importedAt: Date(),
                     lastOpenedAt: Date(),
                     chapters: parsed.chapters.enumerated().map { idx, ch in
-                        ChapterText(index: idx, title: ch.title, paragraphs: ch.paragraphs)
+                        ChapterText.withSpokenTitle(index: idx, title: ch.title, paragraphs: ch.paragraphs)
                     },
                     cursor: PlaybackCursor(),
                     sourceFormat: .epub,

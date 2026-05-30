@@ -59,8 +59,27 @@ struct ChapterText: Codable, Identifiable {
     let index: Int
     let title: String
     let paragraphs: [Paragraph]      // plain text, pre-split
-    
+
     var id: Int { index }
+
+    // Builds a chapter whose title is prepended as the first paragraph so TTS
+    // speaks the heading. Skips prepending when the title is blank or already
+    // matches the first paragraph, to avoid reading it twice.
+    static func withSpokenTitle(index: Int, title: String, paragraphs: [Paragraph]) -> ChapterText {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else {
+            return ChapterText(index: index, title: title, paragraphs: paragraphs)
+        }
+        let firstMatchesTitle = paragraphs.first.map {
+            $0.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(trimmedTitle) == .orderedSame
+        } ?? false
+        guard !firstMatchesTitle else {
+            return ChapterText(index: index, title: title, paragraphs: paragraphs)
+        }
+        let titleParagraph = Paragraph(text: trimmedTitle, pageNumber: paragraphs.first?.pageNumber)
+        return ChapterText(index: index, title: title, paragraphs: [titleParagraph] + paragraphs)
+    }
 }
 
 struct PlaybackCursor: Codable {
