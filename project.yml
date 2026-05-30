@@ -47,14 +47,14 @@ targets:
       path: BooksAppV2/BooksAppV2.entitlements
       properties:
         com.apple.security.application-groups:
-          - group.com.josephti.J7
+          - group.in.josepht.booksappv2
     info:
       path: BooksAppV2/Info.plist
       properties:
         CFBundleDisplayName: "J7 Listen"
         CFBundleName: BooksAppV2
-        CFBundleIdentifier: com.josephti.J7
-        CFBundleVersion: "3"
+        CFBundleIdentifier: in.josepht.booksappv2
+        CFBundleVersion: "8"
         CFBundleShortVersionString: "1.0"
         UILaunchScreen:
           UIColorName: ""
@@ -71,7 +71,7 @@ targets:
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
-          - CFBundleURLName: "com.josephti.J7"
+          - CFBundleURLName: "in.josepht.booksappv2"
             CFBundleURLSchemes:
               - j7
               - booksapp
@@ -119,10 +119,10 @@ targets:
           fi
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.josephti.J7
+        PRODUCT_BUNDLE_IDENTIFIER: in.josepht.booksappv2
         PRODUCT_NAME: BooksAppV2
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 3
+        CURRENT_PROJECT_VERSION: 8
         MARKETING_VERSION: 1.0
         INFOPLIST_FILE: BooksAppV2/Info.plist
         CODE_SIGN_STYLE: Automatic
@@ -137,16 +137,18 @@ targets:
       - path: Sources/Services/Web/SharedContainer.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.josephti.J7.ShareExtension
+        PRODUCT_BUNDLE_IDENTIFIER: in.josepht.booksappv2.ShareExtension
         PRODUCT_NAME: J7ShareExtension
         INFOPLIST_FILE: Sources/Services/Web/ShareExtension/Info.plist
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: "537JMFBG2B"
+        CURRENT_PROJECT_VERSION: 8
+        MARKETING_VERSION: 1.0
     entitlements:
       path: Sources/Services/Web/ShareExtension/J7ShareExtension.entitlements
       properties:
         com.apple.security.application-groups:
-          - group.com.josephti.J7
+          - group.in.josepht.booksappv2
 
   BooksAppV2Tests:
     type: bundle.unit-test

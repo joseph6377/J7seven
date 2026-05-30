@@ -116,13 +116,21 @@ struct WebArticleToParsedBook {
             return nil
         }
         
-        // Target 2:3 ratio standard book cover (e.g. 300x450)
+        // Target 2:3 ratio standard book cover (e.g. 300x450) — aspect-fill crop, not stretch
         let targetSize = CGSize(width: 300, height: 450)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1.0
         let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
-        let resizedImage = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        let resizedImage = renderer.image { ctx in
+            let sourceSize = image.size
+            let scale = max(targetSize.width / sourceSize.width,
+                            targetSize.height / sourceSize.height)
+            let drawSize = CGSize(width: sourceSize.width * scale,
+                                  height: sourceSize.height * scale)
+            let drawOrigin = CGPoint(x: (targetSize.width - drawSize.width) / 2,
+                                     y: (targetSize.height - drawSize.height) / 2)
+            ctx.cgContext.clip(to: CGRect(origin: .zero, size: targetSize))
+            image.draw(in: CGRect(origin: drawOrigin, size: drawSize))
         }
         
         var compression: CGFloat = 0.8

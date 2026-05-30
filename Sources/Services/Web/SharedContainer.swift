@@ -1,7 +1,7 @@
 import Foundation
 
 public enum SharedContainer {
-    public static let appGroup = "group.com.josephti.J7"
+    public static let appGroup = "group.in.josepht.booksappv2"
     
     public static var containerURL: URL {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)!

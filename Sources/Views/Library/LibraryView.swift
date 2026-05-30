@@ -448,25 +448,25 @@ struct LibraryView: View {
             VStack(spacing: 0) {
                 categoryRow(
                     title: "Web Articles",
-                    icon: "link",
+                    icon: "globe",
                     count: filteredBooks.filter { $0.format == .web }.count,
                     format: .web
                 )
                 categoryRow(
                     title: "EPUB Books",
-                    icon: "book",
+                    icon: "book.closed.fill",
                     count: filteredBooks.filter { $0.format == .epub }.count,
                     format: .epub
                 )
                 categoryRow(
                     title: "PDF Documents",
-                    icon: "doc.text",
+                    icon: "doc.richtext.fill",
                     count: filteredBooks.filter { $0.format == .pdf }.count,
                     format: .pdf
                 )
                 categoryRow(
                     title: "Pasted Text",
-                    icon: "doc.on.clipboard",
+                    icon: "text.quote",
                     count: filteredBooks.filter { $0.format == .pastedText }.count,
                     format: .pastedText
                 )
@@ -491,12 +491,26 @@ struct LibraryView: View {
                     activeTypeFilter = format
                 }
             } label: {
-                HStack(spacing: 16) {
-                    Image(systemName: icon)
-                        .font(.body)
-                        .foregroundStyle(.primary.opacity(0.85))
-                        .frame(width: 24, height: 24)
-                    
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        categoryColor(for: format),
+                                        categoryColor(for: format).opacity(0.78)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 36, height: 36)
+                            .shadow(color: categoryColor(for: format).opacity(0.25), radius: 4, x: 0, y: 2)
+                        Image(systemName: icon)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+
                     Text(title)
                         .font(.j7BodyBold)
                         .foregroundStyle(.primary)
@@ -527,7 +541,7 @@ struct LibraryView: View {
             
             if format != .pastedText {
                 Divider()
-                    .padding(.leading, 56)
+                    .padding(.leading, 66)
                     .background(Color.j7Border)
             }
         }
@@ -545,9 +559,9 @@ struct LibraryView: View {
     private func categoryIcon(for format: SourceFormat) -> String {
         switch format {
         case .epub: return "book.closed.fill"
-        case .pdf: return "doc.text.fill"
+        case .pdf: return "doc.richtext.fill"
         case .web: return "globe"
-        case .pastedText: return "doc.text.clipboard.fill"
+        case .pastedText: return "text.quote"
         }
     }
 
@@ -1474,7 +1488,7 @@ struct URLImportProgressView: View {
     }
     
     private func readSharedPayload() -> SharedImportPayload? {
-        guard let sharedContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.josephti.J7") else {
+        guard let sharedContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.in.josepht.booksappv2") else {
             return nil
         }
         let payloadURL = sharedContainer.appendingPathComponent("import_payload.json")
@@ -1483,7 +1497,7 @@ struct URLImportProgressView: View {
     }
     
     private func deleteSharedPayload() {
-        guard let sharedContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.josephti.J7") else {
+        guard let sharedContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.in.josepht.booksappv2") else {
             return
         }
         let payloadURL = sharedContainer.appendingPathComponent("import_payload.json")

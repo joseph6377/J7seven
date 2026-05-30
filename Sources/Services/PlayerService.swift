@@ -37,13 +37,6 @@ final class PlayerService {
         engine.connect(speedControl, to: engine.mainMixerNode, format: format)
 
         engine.prepare()
-        
-        do {
-            try engine.start()
-            print("[Player] Audio engine started successfully in setupEngine")
-        } catch {
-            print("[Player] Audio engine failed to start in setupEngine: \(error)")
-        }
     }
 
     func schedule(_ buffer: AVAudioPCMBuffer, id: String, completion: @escaping @Sendable (String) -> Void) {
@@ -56,6 +49,12 @@ final class PlayerService {
     }
 
     func play() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("[Player] Audio session activation failed: \(error)")
+        }
+
         if !engine.isRunning {
             do {
                 try engine.start()
@@ -85,7 +84,16 @@ final class PlayerService {
         playerNode.stop()
         isPlaying = false
         hasAudioData = false
-        updateNowPlaying()
+
+        nowPlayingQueue.async {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        }
+
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("[Player] Audio session deactivation failed: \(error)")
+        }
     }
 
     func setRate(_ rate: Float) {
@@ -100,8 +108,7 @@ final class PlayerService {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
-            try session.setActive(true)
-            print("[Player] Audio session active: category=\(session.category.rawValue)")
+            print("[Player] Audio session category set: \(session.category.rawValue)")
 
             NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: nil) { [weak self] notification in
                 guard let userInfo = notification.userInfo,

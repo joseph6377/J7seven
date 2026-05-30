@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.josephti.J7</string>
+		<string>group.in.josepht.booksappv2</string>
 	</array>
 </dict>
 </plist>
