@@ -129,7 +129,7 @@ final class ShareViewController: UIViewController {
     
     @MainActor
     private func openHostApp(payloadId: String) {
-        let url = URL(string: "j7://import?id=\(payloadId)&autoplay=1")!
+        let url = URL(string: "lysnbox://import?id=\(payloadId)&autoplay=1")!
         // Walk responder chain to find UIApplication (extensions can't access it directly)
         var responder: UIResponder? = self
         while let r = responder {

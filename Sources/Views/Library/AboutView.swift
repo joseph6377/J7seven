@@ -27,17 +27,14 @@ struct AboutView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 12) {
                     // Logo Image
-                    Image("AppLogo")
-                        .resizable()
-                        .scaledToFit()
+                    AppLogoView()
                         .frame(width: 56, height: 56)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
                         .padding(.top, 4)
                     
                     // Title and Version
                     VStack(spacing: 4) {
-                        Text("About J7 Listen")
+                        Text("About LysnBox")
                             .font(.system(size: 22, weight: .bold, design: .serif))
                             .foregroundStyle(.primary)
                         
@@ -58,7 +55,7 @@ struct AboutView: View {
 
                     // Editorial copy block
                     VStack(spacing: 10) {
-                        Text("J7 Listen began as a personal project to make books easier to enjoy through listening.")
+                        Text("LysnBox began as a personal project to make books easier to enjoy through listening.")
                             .font(.system(size: 14, weight: .regular, design: .serif))
                             .foregroundStyle(.primary.opacity(0.85))
                             .multilineTextAlignment(.center)

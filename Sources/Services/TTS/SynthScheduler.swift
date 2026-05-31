@@ -210,7 +210,6 @@ final class SynthScheduler: PlaybackScheduler {
                         let currentSession = self.playbackSessionId
                         scheduledCount += 1
                         
-                        let isFirst = !firstAudioFired
                         if !firstAudioFired {
                             firstAudioFired = true
                             onFirstAudioReady?()
@@ -226,7 +225,7 @@ final class SynthScheduler: PlaybackScheduler {
                             }
                         }
                         
-                        if isFirst {
+                        if scheduledQueue.count == 1 {
                             setActiveSentence(schedSentence)
                         }
                     }

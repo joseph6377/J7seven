@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>J7 Listen</string>
+	<string>LysnBox</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -52,6 +52,7 @@
 			<string>in.josepht.booksappv2</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>lysnbox</string>
 				<string>j7</string>
 				<string>booksapp</string>
 			</array>

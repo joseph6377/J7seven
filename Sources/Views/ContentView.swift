@@ -8,6 +8,7 @@ enum AppTab {
 
 struct ContentView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
     
     // Global Routing State
     @State private var selectedTab: AppTab = .library
@@ -33,7 +34,8 @@ struct ContentView: View {
     @State private var autoplayOnComplete = false
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        let palette = ThemePalette.resolve(appState.selectedReadingTheme, system: colorScheme)
+        return ZStack(alignment: .bottom) {
             NavigationStack {
                 Group {
                     switch selectedTab {
@@ -66,12 +68,12 @@ struct ContentView: View {
             if let session = appState.activeSession {
                 AudioPlayerView(session: session)
                     .environment(appState)
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                    .preferredColorScheme(.light)
             }
         }
         .onOpenURL { url in
             print("[ContentView] Received open URL scheme: \(url.absoluteString)")
-            if url.scheme == "j7" && url.host == "import" {
+            if (url.scheme == "lysnbox" || url.scheme == "j7") && url.host == "import" {
                 if let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
                    let queryItem = components.queryItems?.first(where: { $0.name == "id" }),
                    let payloadId = queryItem.value {
@@ -109,7 +111,7 @@ struct ContentView: View {
                 activePayload = nil
             }
             .environment(appState)
-            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            .preferredColorScheme(.light)
             .interactiveDismissDisabled()
         }
         .sheet(item: $urlToImport) { identURL in
@@ -121,7 +123,7 @@ struct ContentView: View {
                 urlToImport = nil
             }
             .environment(appState)
-            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            .preferredColorScheme(.light)
             .interactiveDismissDisabled()
         }
         .fileImporter(isPresented: $showFilePicker,
@@ -162,7 +164,7 @@ struct ContentView: View {
                     }
                 }
             )
-            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            .preferredColorScheme(.light)
         }
         .alert("Import Failed", isPresented: $showImportError) {
             Button("OK", role: .cancel) {}
@@ -175,7 +177,7 @@ struct ContentView: View {
                 urlString = ""
                 activeURLToImport = url
             }
-            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            .preferredColorScheme(.light)
         }
         .sheet(item: Binding(
             get: { activeURLToImport.map { IdentifiableURL(url: $0) } },
@@ -188,7 +190,7 @@ struct ContentView: View {
             } onCancel: {
                 activeURLToImport = nil
             }
-            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            .preferredColorScheme(.light)
             .interactiveDismissDisabled()
         }
         .sheet(isPresented: $showPasteSheet) {
@@ -197,7 +199,7 @@ struct ContentView: View {
                 appState.openDocument(entry)
                 appState.activeSession?.play()
             }
-            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            .preferredColorScheme(.light)
         }
         .sheet(isPresented: $showImportDrawer) {
             ImportDrawerSheet(
@@ -205,10 +207,11 @@ struct ContentView: View {
                 onSelectURL: { showURLImport = true },
                 onSelectPasteText: { showPasteSheet = true }
             )
-            .presentationDetents([.fraction(0.30), .medium])
-            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            .presentationDetents([.height(315), .medium])
+            .preferredColorScheme(.light)
         }
-        .preferredColorScheme(appState.selectedAppearance.colorScheme)
+        .preferredColorScheme(.light)
+        .environment(\.palette, palette)
     }
     
     // MARK: - Subviews
@@ -218,36 +221,29 @@ struct ContentView: View {
             Divider()
                 .background(Color.primary.opacity(0.08))
             
-            HStack {
-                // Library Tab Button
-                tabButton(tab: .library, title: "Library", icon: "books.vertical.fill")
+            HStack(spacing: 0) {
+                // Custom Symmetrical Library Icon (Books + Headphones Vector)
+                tabButton(tab: .library, title: "Library", icon: "TabLibraryIcon")
                 
-                Spacer()
-                
-                // Prominent Symmetrical Center Plus Action Button
+                // Symmetrical Flat Center Import Tab Button (Triggers Drawer Sheet)
                 Button {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     showImportDrawer = true
                 } label: {
-                    Image(systemName: "plus")
-                        .font(.title2)
-                        .foregroundStyle(.white)
-                        .frame(width: 42, height: 42)
-                        .background(
-                            Circle()
-                                .fill(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        )
-                        .shadow(color: Color.accentColor.opacity(0.35), radius: 6, x: 0, y: 3)
+                    VStack(spacing: 4) {
+                        Image(systemName: showImportDrawer ? "plus.circle.fill" : "plus.circle")
+                            .font(.title3)
+                        Text("Import")
+                            .font(.j7CaptionBold)
+                    }
+                    .foregroundStyle(showImportDrawer ? Color.accentColor : Color.primary.opacity(0.40))
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
-                .offset(y: -4)
                 
-                Spacer()
-                
-                // Voices Tab Button
-                tabButton(tab: .voices, title: "Voices", icon: "waveform")
+                // Custom Symmetrical Voices Icon (Abstract Sound Ring Vector)
+                tabButton(tab: .voices, title: "Voices", icon: "TabVoicesIcon")
             }
-            .padding(.horizontal, 48)
             .padding(.top, 12)
             .padding(.bottom, 8)
         }
@@ -262,8 +258,17 @@ struct ContentView: View {
             }
         } label: {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.title3)
+                if icon.hasPrefix("Tab") {
+                    Image(icon)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                } else {
+                    Image(systemName: icon)
+                        .font(.title3)
+                }
+                
                 Text(title)
                     .font(.j7CaptionBold)
             }

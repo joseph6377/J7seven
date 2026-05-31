@@ -10,36 +10,27 @@ struct WelcomeModelDownloadView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Drag grabber indicator
-            Capsule()
-                .fill(Color.primary.opacity(0.12))
-                .frame(width: 36, height: 5)
-                .padding(.top, 12)
-            
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 24) {
                     // Header Block
                     VStack(spacing: 12) {
-                        Image("AppLogo")
-                            .resizable()
-                            .scaledToFit()
+                        AppLogoView()
                             .frame(width: 72, height: 72)
-                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                             .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 5)
                             .padding(.top, 12)
                         
                         VStack(spacing: 4) {
-                            Text("Welcome to J7 Listen")
+                            Text("Welcome to LysnBox")
                                 .font(.j7Title1Serif)
                                 .foregroundStyle(.primary)
                             
                             Text("YOUR PRIVATE AUDIOBOOK SANCTUARY")
                                 .font(.j7Caption2Bold)
-                                .foregroundStyle(.secondary.opacity(0.8))
+                                .foregroundStyle(.secondary)
                                 .kerning(1.2)
                         }
                         
-                        Text("Configure your audio narration engine to begin. J7 operates 100% on-device, ensuring complete privacy.")
+                        Text("Configure your audio narration engine to begin. LysnBox operates 100% on-device, ensuring complete privacy.")
                             .font(.j7Subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)

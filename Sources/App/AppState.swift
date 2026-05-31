@@ -26,14 +26,31 @@ final class AppState {
     var books: [LibraryEntry] = []
     var activeSession: ReaderSession?
     var showPlayer = false
-    var selectedAppearance: AppAppearance {
+    var selectedReadingTheme: ReadingTheme {
         didSet {
-            UserDefaults.standard.set(selectedAppearance.rawValue, forKey: "app.appearance")
+            UserDefaults.standard.set(selectedReadingTheme.rawValue, forKey: "app.readingTheme")
         }
+    }
+    
+    var selectedAppearance: AppAppearance {
+        get { .light }
+        set { selectedReadingTheme = .modernBlue }
     }
     var fontSize: Double {
         didSet {
             UserDefaults.standard.set(fontSize, forKey: "app.font.size")
+        }
+    }
+    
+    var selectedFontFamily: BookFontFamily {
+        didSet {
+            UserDefaults.standard.set(selectedFontFamily.rawValue, forKey: "app.font.family")
+        }
+    }
+
+    var hideText: Bool {
+        didSet {
+            UserDefaults.standard.set(hideText, forKey: "app.hideText")
         }
     }
 
@@ -44,14 +61,30 @@ final class AppState {
         let apple      = AppleVoiceScheduler()
         let sched      = SynthScheduler(synthesizer: supertonic, player: player)
 
+        if ProcessInfo.processInfo.arguments.contains("-SkipOnboarding") {
+            UserDefaults.standard.set(true, forKey: "library.onboarding.showcased")
+            UserDefaults.standard.set(true, forKey: "hasSeenWelcomeDownloadPrompt")
+            UserDefaults.standard.set(TTSEngine.apple.rawValue, forKey: "tts.engine")
+        }
+
         let saved = UserDefaults.standard.string(forKey: "tts.engine")
             .flatMap(TTSEngine.init(rawValue:)) ?? .supertonic
 
-        let savedAppearance = UserDefaults.standard.string(forKey: "app.appearance")
-            .flatMap(AppAppearance.init(rawValue:)) ?? .system
+        let savedThemeRaw = UserDefaults.standard.string(forKey: "app.readingTheme")
+        let savedTheme: ReadingTheme
+        if savedThemeRaw == "Light" {
+            savedTheme = .modernBlue
+        } else {
+            savedTheme = savedThemeRaw.flatMap(ReadingTheme.init(rawValue:)) ?? .modernBlue
+        }
 
         let savedFontSize = UserDefaults.standard.double(forKey: "app.font.size")
         let actualFontSize = savedFontSize == 0.0 ? 18.0 : savedFontSize
+
+        let savedFontFamilyString = UserDefaults.standard.string(forKey: "app.font.family")
+        let savedFontFamily = savedFontFamilyString.flatMap(BookFontFamily.init(rawValue:)) ?? .charter
+
+        let savedHideText = UserDefaults.standard.bool(forKey: "app.hideText")
 
         libraryService        = lib
         playerService         = player
@@ -59,8 +92,10 @@ final class AppState {
         synthScheduler        = sched
         appleVoiceScheduler   = apple
         selectedEngine        = saved
-        selectedAppearance    = savedAppearance
+        selectedReadingTheme  = savedTheme
         fontSize              = actualFontSize
+        selectedFontFamily    = savedFontFamily
+        hideText              = savedHideText
 
         books = lib.scanLocalLibrary()
         supertonic.checkAndPrepare()

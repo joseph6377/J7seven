@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ImportDrawerSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.palette) private var palette
     
     // Callback actions triggered when a row is selected
     let onSelectFile: () -> Void
@@ -9,62 +10,54 @@ struct ImportDrawerSheet: View {
     let onSelectPasteText: () -> Void
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Elegant grab handle notch at the top
-            Capsule()
-                .fill(Color.primary.opacity(0.12))
-                .frame(width: 36, height: 5)
-                .padding(.top, 10)
-                .padding(.bottom, 24)
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Add to Library")
+                .font(.j7Title3Serif)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 8)
+                .padding(.top, 24) // Elegant vertical spacing below native drag indicator
             
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Add to Library")
-                    .font(.j7Title3Serif)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 8)
+            VStack(spacing: 0) {
+                drawerRow(
+                    title: "From File",
+                    subtitle: "Import EPUB or PDF files",
+                    icon: "doc",
+                    action: onSelectFile
+                )
                 
-                VStack(spacing: 0) {
-                    drawerRow(
-                        title: "From File",
-                        subtitle: "Import EPUB or PDF files",
-                        icon: "doc",
-                        action: onSelectFile
-                    )
-                    
-                    Divider()
-                        .padding(.leading, 56)
-                        .background(Color.primary.opacity(0.03))
-                    
-                    drawerRow(
-                        title: "From URL",
-                        subtitle: "Convert any web article to audio",
-                        icon: "link",
-                        action: onSelectURL
-                    )
-                    
-                    Divider()
-                        .padding(.leading, 56)
-                        .background(Color.primary.opacity(0.03))
-                    
-                    drawerRow(
-                        title: "Paste Text",
-                        subtitle: "Paste text and start listening",
-                        icon: "doc.on.clipboard",
-                        action: onSelectPasteText
-                    )
-                }
-                .background(Color.j7Surface)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.j7Border, lineWidth: 1)
+                Divider()
+                    .padding(.leading, 56)
+                    .background(Color.primary.opacity(0.03))
+                
+                drawerRow(
+                    title: "From URL",
+                    subtitle: "Convert any web article to audio",
+                    icon: "link",
+                    action: onSelectURL
+                )
+                
+                Divider()
+                    .padding(.leading, 56)
+                    .background(Color.primary.opacity(0.03))
+                
+                drawerRow(
+                    title: "Paste Text",
+                    subtitle: "Paste text and start listening",
+                    icon: "doc.on.clipboard",
+                    action: onSelectPasteText
                 )
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 24)
+            .background(palette.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(palette.border, lineWidth: 1)
+            )
             
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 24)
         .background(.ultraThinMaterial)
     }
     

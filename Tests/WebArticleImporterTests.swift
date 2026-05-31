@@ -15,7 +15,7 @@ final class WebArticleImporterTests: XCTestCase {
             <p>This is a long article about something static and beautiful. It contains enough content to pass the length threshold.</p>
             <p>More paragraphs here to make sure it gets over 500 characters so that it does not trigger the SPA length heuristic, which checks the text length of the body to prevent importing blank shells.</p>
             <p>Adding more paragraphs to be absolutely sure we pass the threshold. XcodeGen has built a very robust dependency graph and now our package is fully compiled. This test verifies that typical long news articles are parsed statically via plain URLSession rather than falling back to WKWebView headless rendering.</p>
-            <p>Still adding more text to satisfy the 500 character minimum. This sentence is about the audiobook player. J7 Listen is a gorgeous iOS audiobook app that performs live, ephemeral streaming text-to-speech without writing temporary audio PCM buffers to local storage. It is built in SwiftUI, follows strict concurrency, and works on iOS 17.0+.</p>
+            <p>Still adding more text to satisfy the 500 character minimum. This sentence is about the audiobook player. LysnBox is a gorgeous iOS audiobook app that performs live, ephemeral streaming text-to-speech without writing temporary audio PCM buffers to local storage. It is built in SwiftUI, follows strict concurrency, and works on iOS 17.0+.</p>
         </article>
         </body>
         </html>

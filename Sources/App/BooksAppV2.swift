@@ -8,6 +8,7 @@ struct BooksAppV2: App {
         WindowGroup {
             ContentView()
                 .environment(appState)
+                .preferredColorScheme(.light)
         }
     }
 }

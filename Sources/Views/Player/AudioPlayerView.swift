@@ -4,14 +4,18 @@ struct AudioPlayerView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.palette) private var palette
     @ObservedObject var session: ReaderSession
 
     @State private var showSettings = false
     @State private var showChapters = false
     @State private var showMoreOptions = false
     @State private var showVoices = false
-    @State private var isMuted = false
     @State private var isParagraphScrolledAway = false
+
+    // Bookmark Toast notification states
+    @State private var showToast = false
+    @State private var toastMessage = ""
 
     // Inactivity Auto-Hide controls state
     @State private var areControlsVisible = true
@@ -30,11 +34,7 @@ struct AudioPlayerView: View {
     @State private var lastScrollTime = Date.distantPast
 
     private var themeBackgroundColor: Color {
-        if colorScheme == .dark {
-            return Color(hex: "0C0C0E") // Obsidian dark theme
-        } else {
-            return Color(hex: "F7F5F0") // Warm editorial paper background
-        }
+        palette.appBackground
     }
 
     var body: some View {
@@ -56,126 +56,127 @@ struct AudioPlayerView: View {
                     }
 
                 // The Editorial Serif Reader Canvas (Full Screen)
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        Spacer().frame(height: geometry.safeAreaInsets.top + (areControlsVisible ? 76 : 24))
+                if appState.hideText {
+                    listeningModeCanvas(geometry: geometry)
+                } else {
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(alignment: .leading, spacing: 18) {
+                            Spacer().frame(height: geometry.safeAreaInsets.top + (areControlsVisible ? 76 : 24))
 
-                        let chapter = session.document.chapters[session.currentChapterIndex]
-                        
-                        // Chapter Title Header in Georgia Serif
-                        Text(chapter.title)
-                            .font(.j7Title1Serif)
-                            .padding(.horizontal, 24)
-                            .padding(.top, 10)
-                            .padding(.bottom, 16)
-                            .foregroundStyle(Color.accentColor)
-                        
-                        ForEach(0..<chapter.paragraphs.count, id: \.self) { pIdx in
-                            let para = chapter.paragraphs[pIdx]
-                            let isCurrent = session.currentParagraphIndex == pIdx
+                            let chapter = session.document.chapters[session.currentChapterIndex]
+                            let firstIsTitle = !chapter.paragraphs.isEmpty &&
+                                chapter.paragraphs[0].text.trimmingCharacters(in: .whitespacesAndNewlines)
+                                .caseInsensitiveCompare(chapter.title.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
                             
-                            paragraphView(para: para, pIdx: pIdx, isCurrent: isCurrent)
-                                .id(pIdx)
-                        }
-                    }
-                    .padding(.bottom, 220) // Sizable cushion to easily scroll past the new floating player panel!
-                }
-                .ignoresSafeArea(edges: .all)
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 5).onChanged { _ in
-                        if !isParagraphScrolledAway {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                isParagraphScrolledAway = true
-                            }
-                        }
-                    }
-                )
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        areControlsVisible.toggle()
-                    }
-                    if areControlsVisible {
-                        resetAutoHideTimer()
-                    } else {
-                        cancelAutoHideTimer()
-                    }
-                }
-                .onLongPressGesture {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    showSettings = true
-                }
-                .onAppear {
-                    let currentParaIdx = session.currentParagraphIndex
-                    let chapters = session.document.chapters
-                    let progress: Double
-                    if session.currentChapterIndex < chapters.count {
-                        let chapter = chapters[session.currentChapterIndex]
-                        if currentParaIdx < chapter.paragraphs.count {
-                            let para = chapter.paragraphs[currentParaIdx]
-                            if let range = session.activeWordRange, para.text.count > 0 {
-                                progress = Double(range.location) / Double(para.text.count)
+                            // Chapter Title Header
+                            if firstIsTitle {
+                                let isCurrent = session.currentParagraphIndex == 0
+                                if isCurrent {
+                                    let attributed = makeAttributedParagraph(chapter.title)
+                                    Text(attributed)
+                                        .font(.j7BookTitle(size: 26, family: appState.selectedFontFamily))
+                                        .foregroundStyle(palette.textPrimary)
+                                        .lineSpacing(6)
+                                        .padding(.horizontal, 24)
+                                        .padding(.top, 10)
+                                        .padding(.bottom, 16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .fill(palette.activeParagraphBg)
+                                        )
+                                        .background(
+                                            GeometryReader { geo in
+                                                Color.clear
+                                                    .preference(key: ActiveParagraphFramePreferenceKey.self, value: geo.frame(in: .global))
+                                            }
+                                        )
+                                        .contentShape(Rectangle())
+                                        .gesture(
+                                            TapGesture(count: 2)
+                                                .onEnded {
+                                                    session.jumpToParagraph(0)
+                                                }
+                                                .exclusively(before: TapGesture(count: 1)
+                                                    .onEnded {
+                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                            areControlsVisible.toggle()
+                                                        }
+                                                        if areControlsVisible {
+                                                            resetAutoHideTimer()
+                                                        } else {
+                                                            cancelAutoHideTimer()
+                                                        }
+                                                    }
+                                                )
+                                        )
+                                        .id(0)
+                                } else {
+                                    Text(chapter.title)
+                                        .font(.j7BookTitle(size: 26, family: appState.selectedFontFamily))
+                                        .foregroundStyle(palette.textPrimary)
+                                        .padding(.horizontal, 24)
+                                        .padding(.top, 10)
+                                        .padding(.bottom, 16)
+                                        .contentShape(Rectangle())
+                                        .gesture(
+                                            TapGesture(count: 2)
+                                                .onEnded {
+                                                    session.jumpToParagraph(0)
+                                                }
+                                                .exclusively(before: TapGesture(count: 1)
+                                                    .onEnded {
+                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                            areControlsVisible.toggle()
+                                                        }
+                                                        if areControlsVisible {
+                                                            resetAutoHideTimer()
+                                                        } else {
+                                                            cancelAutoHideTimer()
+                                                        }
+                                                    }
+                                                )
+                                        )
+                                        .id(0)
+                                }
                             } else {
-                                progress = 0.0
+                                Text(chapter.title)
+                                    .font(.j7BookTitle(size: 26, family: appState.selectedFontFamily))
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, 10)
+                                    .padding(.bottom, 16)
+                                    .foregroundStyle(palette.textPrimary)
                             }
-                        } else {
-                            progress = 0.0
+                            
+                            let startIndex = firstIsTitle ? 1 : 0
+                            ForEach(startIndex..<chapter.paragraphs.count, id: \.self) { pIdx in
+                                let para = chapter.paragraphs[pIdx]
+                                let isCurrent = session.currentParagraphIndex == pIdx
+                                
+                                paragraphView(para: para, pIdx: pIdx, isCurrent: isCurrent)
+                                    .id(pIdx)
+                                    .accessibilityIdentifier("paragraph_row_\(pIdx)")
+                            }
                         }
-                    } else {
-                        progress = 0.0
+                        .padding(.bottom, 220) // Sizable cushion to easily scroll past the new floating player panel!
                     }
-                    
-                    lastScrolledParagraphIndex = currentParaIdx
-                    lastScrolledSentenceRange = nil
-                    lastScrolledProgress = progress
-                    lastScrollTime = Date()
-                    
-                    scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: progress))
-                    
-                    if session.state == .playing {
-                        resetAutoHideTimer()
-                    }
-                }
-                .onDisappear {
-                    cancelAutoHideTimer()
-                }
-                .onChange(of: session.currentParagraphIndex) { _, newIdx in
-                    if areControlsVisible {
-                        resetAutoHideTimer()
-                    }
-                    
-                    // As decided: if user manually scrolled away, do NOT snap back!
-                    guard !isParagraphScrolledAway else { return }
-                    
-                    lastScrolledParagraphIndex = newIdx
-                    lastScrolledSentenceRange = nil
-                    lastScrolledProgress = 0.0
-                    lastScrollTime = Date()
-                    
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                        scrollProxy.scrollTo(newIdx, anchor: .center)
-                    }
-                }
-                .onChange(of: session.activeWordRange) { _, _ in
-                    checkAndCenterHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
-                }
-                .onChange(of: session.state) { _, newState in
-                    if newState == .playing {
-                        resetAutoHideTimer()
-                    } else {
-                        cancelAutoHideTimer()
+                    .ignoresSafeArea(edges: .all)
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 5).onChanged { _ in
+                            if !isParagraphScrolledAway {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    isParagraphScrolledAway = true
+                                }
+                            }
+                        }
+                    )
+                    .onTapGesture {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            areControlsVisible = true
+                            areControlsVisible.toggle()
                         }
-                    }
-                }
-                .onChange(of: session.playbackError != nil) { _, hasError in
-                    if hasError, let error = session.playbackError {
-                        let desc = error.localizedDescription
-                        if desc.contains("Model not loaded") || desc.contains("Model file missing") {
-                            showRepairSheet = true
+                        if areControlsVisible {
+                            resetAutoHideTimer()
                         } else {
-                            activeError = error
-                            showErrorAlert = true
+                            cancelAutoHideTimer()
                         }
                     }
                 }
@@ -196,13 +197,32 @@ struct AudioPlayerView: View {
                     .offset(y: areControlsVisible ? 0 : -150)
                     .opacity(areControlsVisible ? 1.0 : 0.0)
 
+                // Premium floating bookmark toast notification
+                if showToast {
+                    HStack(spacing: 8) {
+                        Image(systemName: toastMessage.contains("Added") ? "bookmark.fill" : "bookmark")
+                            .font(.j7CaptionBold)
+                            .foregroundStyle(.white)
+                        Text(toastMessage)
+                            .font(.j7CaptionBold)
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.85), in: Capsule())
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .padding(.top, geometry.safeAreaInsets.top + 70) // perfect placement below header
+                    .zIndex(100)
+                }
+
                 // Immersive floating "Sync Highlight" pill for one-tap snapping in full screen
                 if !areControlsVisible && isParagraphScrolledAway {
                     VStack {
                         Spacer()
                         
                         HStack(spacing: 6) {
-                            Image(systemName: "location.fill")
+                            Image(systemName: "scope")
                                 .font(.j7Caption2Bold)
                             Text("Sync Highlight")
                                 .font(.j7CaptionBold)
@@ -268,6 +288,92 @@ struct AudioPlayerView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            .onAppear {
+                let currentParaIdx = session.currentParagraphIndex
+                let chapters = session.document.chapters
+                let progress: Double
+                if session.currentChapterIndex < chapters.count {
+                    let chapter = chapters[session.currentChapterIndex]
+                    if currentParaIdx < chapter.paragraphs.count {
+                        let para = chapter.paragraphs[currentParaIdx]
+                        if let range = session.activeWordRange, para.text.count > 0 {
+                            progress = Double(range.location) / Double(para.text.count)
+                        } else {
+                            progress = 0.0
+                        }
+                    } else {
+                        progress = 0.0
+                    }
+                } else {
+                    progress = 0.0
+                }
+                
+                lastScrolledParagraphIndex = currentParaIdx
+                lastScrolledSentenceRange = nil
+                lastScrolledProgress = progress
+                lastScrollTime = Date()
+                
+                scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: progress))
+                
+                if session.state == .playing {
+                    resetAutoHideTimer()
+                }
+            }
+            .onDisappear {
+                cancelAutoHideTimer()
+            }
+            .onChange(of: session.currentParagraphIndex) { _, newIdx in
+                if areControlsVisible {
+                    resetAutoHideTimer()
+                }
+                
+                // As decided: if user manually scrolled away, do NOT snap back!
+                guard !isParagraphScrolledAway else { return }
+                
+                lastScrolledParagraphIndex = newIdx
+                lastScrolledSentenceRange = nil
+                lastScrolledProgress = 0.0
+                lastScrollTime = Date()
+                
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                    scrollProxy.scrollTo(newIdx, anchor: .center)
+                }
+            }
+            .onChange(of: session.currentChapterIndex) { _, newChIdx in
+                isParagraphScrolledAway = false
+                lastScrolledParagraphIndex = 0
+                lastScrolledSentenceRange = nil
+                lastScrolledProgress = 0.0
+                lastScrollTime = Date()
+                
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                    scrollProxy.scrollTo(0, anchor: .top)
+                }
+            }
+            .onChange(of: session.activeWordRange) { _, _ in
+                checkAndCenterHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
+            }
+            .onChange(of: session.state) { _, newState in
+                if newState == .playing {
+                    resetAutoHideTimer()
+                } else {
+                    cancelAutoHideTimer()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        areControlsVisible = true
+                    }
+                }
+            }
+            .onChange(of: session.playbackError != nil) { _, hasError in
+                if hasError, let error = session.playbackError {
+                    let desc = error.localizedDescription
+                    if desc.contains("Model not loaded") || desc.contains("Model file missing") {
+                        showRepairSheet = true
+                    } else {
+                        activeError = error
+                        showErrorAlert = true
+                    }
+                }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(edges: .top)
             .onPreferenceChange(ActiveParagraphFramePreferenceKey.self) { rect in
@@ -276,21 +382,21 @@ struct AudioPlayerView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsSheet(session: session)
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                    .preferredColorScheme(.light)
             }
             .sheet(isPresented: $showChapters) {
                 AudioChapterPickerView(session: session)
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                    .preferredColorScheme(.light)
             }
             .sheet(isPresented: $showVoices) {
                 VoicesView(isLocked: true)
                     .environment(appState)
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                    .preferredColorScheme(.light)
             }
             .sheet(isPresented: $showMoreOptions) {
                 MoreOptionsSheet(session: session)
                     .environment(appState)
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                    .preferredColorScheme(.light)
             }
             .sheet(isPresented: $showRepairSheet, onDismiss: {
                 session.playbackError = nil
@@ -299,7 +405,7 @@ struct AudioPlayerView: View {
                     appState.selectedEngine = .supertonic
                     session.switchToScheduler(appState.synthScheduler, voices: TTSVoice.loadAll())
                 }
-                .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                .preferredColorScheme(.light)
             }
             .alert("Playback Error", isPresented: $showErrorAlert, presenting: activeError) { _ in
                 Button("OK", role: .cancel) {
@@ -318,14 +424,14 @@ struct AudioPlayerView: View {
         if isCurrent {
             let attributed = makeAttributedParagraph(para.text)
             Text(attributed)
-                .font(.j7BookContent(size: appState.fontSize, weight: .medium))
-                .foregroundStyle(Color.primary)
+                .font(.j7BookContent(size: appState.fontSize, family: appState.selectedFontFamily, weight: .medium))
+                .foregroundStyle(palette.textPrimary)
                 .lineSpacing(6)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color(hex: "EFECE6"))
+                        .fill(palette.activeParagraphBg)
                 )
                 .background(
                     GeometryReader { geo in
@@ -334,42 +440,176 @@ struct AudioPlayerView: View {
                     }
                 )
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    if areControlsVisible {
-                        session.jumpToParagraph(pIdx)
-                    } else {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            areControlsVisible = true
+                .gesture(
+                    TapGesture(count: 2)
+                        .onEnded {
+                            session.jumpToParagraph(pIdx)
                         }
-                        resetAutoHideTimer()
-                    }
-                }
-                .onLongPressGesture {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    showSettings = true
-                }
+                        .exclusively(before: TapGesture(count: 1)
+                            .onEnded {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    areControlsVisible.toggle()
+                                }
+                                if areControlsVisible {
+                                    resetAutoHideTimer()
+                                } else {
+                                    cancelAutoHideTimer()
+                                }
+                            }
+                        )
+                )
         } else {
             Text(para.text)
-                .font(.j7BookContent(size: appState.fontSize))
-                .foregroundStyle(Color.primary.opacity(0.75))
+                .font(.j7BookContent(size: appState.fontSize, family: appState.selectedFontFamily))
+                .foregroundStyle(palette.textSecondary)
                 .lineSpacing(6)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 10)
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    if areControlsVisible {
-                        session.jumpToParagraph(pIdx)
-                    } else {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            areControlsVisible = true
+                .gesture(
+                    TapGesture(count: 2)
+                        .onEnded {
+                            session.jumpToParagraph(pIdx)
                         }
-                        resetAutoHideTimer()
+                        .exclusively(before: TapGesture(count: 1)
+                            .onEnded {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    areControlsVisible.toggle()
+                                }
+                                if areControlsVisible {
+                                    resetAutoHideTimer()
+                                } else {
+                                    cancelAutoHideTimer()
+                                }
+                            }
+                        )
+                )
+        }
+    }
+
+    private func amplitude(for index: Int, at time: TimeInterval) -> CGFloat {
+        let speeds = [4.5, 6.0, 3.5, 7.0, 5.0, 6.5, 4.0, 5.5, 4.8, 6.2, 3.8, 7.2, 5.2, 6.7, 4.2]
+        let phase = Double(index) * 0.8
+        let sine = sin(time * speeds[index % speeds.count] + phase)
+        let normalized = (sine + 1.0) / 2.0 // 0 to 1
+        return CGFloat(0.1 + normalized * 0.9) // 0.1 to 1.0
+    }
+
+    @ViewBuilder
+    private func listeningModeCanvas(geometry: GeometryProxy) -> some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            // Elegant Cover Placeholder or Image
+            if let data = session.document.coverImageData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 190, height: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.35 : 0.12), radius: 15, x: 0, y: 10)
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(LinearGradient(
+                            colors: [Color.accentColor.opacity(0.08), Color.accentColor.opacity(0.03)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.accentColor.opacity(0.15), lineWidth: 1)
+                        )
+                    
+                    VStack(spacing: 16) {
+                        Image(systemName: "music.note.list")
+                            .font(.system(size: 40))
+                            .foregroundStyle(Color.accentColor.opacity(0.7))
+                        
+                        Text(session.document.title)
+                            .font(.j7SubheadlineSerifBold)
+                            .foregroundStyle(palette.textPrimary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                            .lineLimit(3)
+                        
+                        if let author = session.document.author {
+                            Text(author)
+                                .font(.j7Caption)
+                                .foregroundStyle(palette.textSecondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 16)
+                                .lineLimit(1)
+                        }
                     }
                 }
-                .onLongPressGesture {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    showSettings = true
+                .frame(width: 190, height: 280)
+                .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 4)
+            }
+            
+            // Metadata Section
+            VStack(spacing: 8) {
+                Text(session.document.title)
+                    .font(.j7BookTitle(size: 24, family: appState.selectedFontFamily))
+                    .foregroundStyle(palette.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .lineLimit(2)
+                
+                if let author = session.document.author {
+                    Text(author)
+                        .font(.j7SubheadlineBold)
+                        .foregroundStyle(palette.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                        .lineLimit(1)
                 }
+                
+                let chapter = session.document.chapters[session.currentChapterIndex]
+                Text(chapter.title)
+                    .font(.j7CaptionBold)
+                    .foregroundStyle(Color.accentColor)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .lineLimit(2)
+                    .padding(.top, 4)
+            }
+            
+            // Beautiful Flowing Animated Waveform for premium feel!
+            HStack(spacing: 4) {
+                ForEach(0..<15, id: \.self) { idx in
+                    if session.state == .playing {
+                        TimelineView(.animation) { timeline in
+                            let value = amplitude(for: idx, at: timeline.date.timeIntervalSince1970)
+                            RoundedRectangle(cornerRadius: 2.5)
+                                .fill(Color.accentColor.opacity(0.85))
+                                .frame(width: 5, height: max(6, value * 44))
+                        }
+                    } else {
+                        RoundedRectangle(cornerRadius: 2.5)
+                            .fill(Color.secondary.opacity(0.25))
+                            .frame(width: 5, height: 6)
+                    }
+                }
+            }
+            .frame(height: 50)
+            .padding(.top, 16)
+            
+            Spacer()
+        }
+        .padding(.top, geometry.safeAreaInsets.top + (areControlsVisible ? 76 : 24))
+        .padding(.bottom, 220)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                areControlsVisible.toggle()
+            }
+            if areControlsVisible {
+                resetAutoHideTimer()
+            } else {
+                cancelAutoHideTimer()
+            }
         }
     }
 
@@ -452,19 +692,16 @@ struct AudioPlayerView: View {
            let sentenceRange = Range(sentenceNSRange, in: para) {
             if let start = AttributedString.Index(sentenceRange.lowerBound, within: attributed),
                let end = AttributedString.Index(sentenceRange.upperBound, within: attributed) {
-                if colorScheme == .dark {
-                    attributed[start..<end].backgroundColor = Color(hex: "FFCC00").opacity(0.15) // Soft dark amber highlight
-                } else {
-                    attributed[start..<end].backgroundColor = Color(hex: "FFCC00").opacity(0.20) // Soft light gold highlight
-                }
+                attributed[start..<end].backgroundColor = palette.activeSentenceBg
             }
         }
         
-        // 3. Style the active word with the soft amber focus box
+        // 3. Style the active word with a gorgeous, high-contrast matte focus box
         if let range = Range(nsRange, in: para) {
             if let start = AttributedString.Index(range.lowerBound, within: attributed),
                let end = AttributedString.Index(range.upperBound, within: attributed) {
-                attributed[start..<end].backgroundColor = Color(hex: "FFCC00").opacity(0.35) // Soft amber word-level highlight box
+                attributed[start..<end].backgroundColor = palette.activeWordBg
+                attributed[start..<end].foregroundColor = palette.activeWordFg
             }
         }
         
@@ -472,7 +709,7 @@ struct AudioPlayerView: View {
     }
 
     private func header(scrollProxy: ScrollViewProxy, safeAreaTop: CGFloat) -> some View {
-        HStack {
+        HStack(spacing: 12) {
             Button {
                 dismiss()
             } label: {
@@ -517,20 +754,47 @@ struct AudioPlayerView: View {
                     scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: progress))
                 }
             } label: {
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .center, spacing: 2) {
                     Text(session.document.title)
                         .font(.j7Title3Serif)
                         .lineLimit(1)
                         .foregroundStyle(Color.primary)
 
                     let chapter = session.document.chapters[session.currentChapterIndex]
-                    Text("Chapter \(session.currentChapterIndex + 1): \(chapter.title)")
+                    let displayTitle: String = {
+                        let trimmed = chapter.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.isEmpty {
+                            return "Chapter \(session.currentChapterIndex + 1)"
+                        }
+                        let lowercase = trimmed.lowercased()
+                        if lowercase.hasPrefix("chapter") || lowercase.hasPrefix("ch.") || lowercase.hasPrefix("ch ") {
+                            return trimmed
+                        }
+                        return "Chapter \(session.currentChapterIndex + 1): \(trimmed)"
+                    }()
+                    Text(displayTitle)
                         .font(.j7Subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("player_header_title_button")
+            
+            Spacer()
+            
+            Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                showSettings = true
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.j7BodyBold)
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 44, height: 44)
+                    .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.04))
+                    .clipShape(Circle())
+            }
+            .accessibilityIdentifier("player_more_options_button")
         }
         .padding(.horizontal, 16)
         .padding(.top, safeAreaTop + 8) // Dynamic padding to perfectly clear notch on all devices!
@@ -555,7 +819,7 @@ struct AudioPlayerView: View {
             let stats = bookTimingStats
             let progress = overallProgress
             
-            // Row 1: Sleek Progress Bar and Timers
+            // Row 1: Sleek Progress Bar and Timers (Clean & minimal)
             VStack(spacing: 8) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
@@ -571,27 +835,7 @@ struct AudioPlayerView: View {
                 .frame(height: 4)
                 .padding(.horizontal, 20)
 
-                // Human-readable progress summary
-                HStack(spacing: 8) {
-                    Text("\(Int(round(progress * 100)))% Complete")
-                        .font(.j7CaptionMedium)
-                        .foregroundStyle(.secondary)
-
-                    if session.state == .playing {
-                        MicroWaveformVisualizer(isPlaying: true)
-                            .scaleEffect(0.55)
-                            .frame(height: 14)
-                            .transition(.opacity)
-                    }
-
-                    Spacer()
-
-                    Text("\(stats.remainingHuman) Remaining")
-                        .font(.j7CaptionMedium)
-                        .foregroundStyle(Color.accentColor)
-                }
-                .padding(.horizontal, 20)
-
+                // 3 Clean Timing Indicators Directly Under Progress Bar
                 HStack {
                     Text(stats.elapsed)
                         .font(.j7Caption)
@@ -613,24 +857,22 @@ struct AudioPlayerView: View {
             }
             .padding(.top, 16)
             
-            // Row 2: Playback Controls Row (Mute, SkipBack, Play/Pause Circle, SkipForward, Speed Menu)
+            // Row 2: Playback Controls Row (Bookmark, SkipBack, Play/Pause Circle, SkipForward, Speed Menu)
             HStack(spacing: 0) {
-                // Mute Button
+                // Bookmark Button (Far Left)
+                let isBookmarked = session.bookmarkedParagraphs.contains("\(session.currentChapterIndex)-\(session.currentParagraphIndex)")
                 Button {
-                    isMuted.toggle()
-                    if isMuted {
-                        session.player.pause()
-                    } else {
-                        session.player.play()
-                    }
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    session.toggleBookmarkForCurrentParagraph()
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    triggerToast(isBookmarked ? "Bookmark Removed" : "Bookmark Added")
                 } label: {
-                    Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                         .font(.j7BodyBold)
-                        .foregroundStyle(Color.primary)
+                        .foregroundStyle(isBookmarked ? Color.accentColor : Color.primary)
                         .frame(width: 44, height: 44)
                         .background(Color.primary.opacity(0.05), in: Circle())
                 }
+                .buttonStyle(.plain)
                 
                 Spacer()
                 
@@ -674,6 +916,7 @@ struct AudioPlayerView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("player_play_pause_button")
                 
                 Spacer()
                 
@@ -690,7 +933,7 @@ struct AudioPlayerView: View {
                 
                 Spacer()
                 
-                // Speed Selector Pill (Right)
+                // Speed Selector Pill (Far Right)
                 Menu {
                     ForEach([Float(0.8), Float(1.0), Float(1.25), Float(1.5), Float(1.75), Float(2.0)], id: \.self) { rate in
                         Button {
@@ -715,34 +958,15 @@ struct AudioPlayerView: View {
             }
             .padding(.horizontal, 16)
             
-            // Row 3: Direct Utility Actions (Symmetrical balance spacer, Voice selector pill, Chapter button)
+            // Row 3: Bottom Row with Perfectly Centered Voice Pill and Right Chapter Button
             HStack(spacing: 0) {
-                // Font size picker (Left)
-                Menu {
-                    ForEach([14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0], id: \.self) { size in
-                        Button {
-                            appState.fontSize = size
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        } label: {
-                            HStack {
-                                Text("\(Int(size)) pt" + (size == 18.0 ? " (Default)" : ""))
-                                if appState.fontSize == size {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "textformat.size")
-                        .font(.j7BodyBold)
-                        .foregroundStyle(Color.primary)
-                        .frame(width: 44, height: 44)
-                        .background(Color.primary.opacity(0.05), in: Circle())
-                }
+                // Symmetrical invisible spacer on the left to perfectly center the Voice pill
+                Color.clear
+                    .frame(width: 44, height: 44)
                 
                 Spacer()
                 
-                // Voice selector pill (Center)
+                // Voice selector pill (Perfectly Center)
                 Button {
                     showVoices = true
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -757,15 +981,15 @@ struct AudioPlayerView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 7)
-                    .background(Color.j7Surface, in: Capsule())
-                    .overlay(Capsule().stroke(Color.j7Border, lineWidth: 1))
+                    .background(palette.surface, in: Capsule())
+                    .overlay(Capsule().stroke(palette.border, lineWidth: 1))
                     .shadow(color: .black.opacity(0.06), radius: 3, x: 0, y: 1)
                 }
                 .buttonStyle(.plain)
                 
                 Spacer()
                 
-                // Chapter selector list icon (Right)
+                // Chapter selector list icon (Far Right)
                 Button {
                     showChapters = true
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -776,6 +1000,7 @@ struct AudioPlayerView: View {
                         .frame(width: 44, height: 44)
                         .background(Color.primary.opacity(0.05), in: Circle())
                 }
+                .accessibilityIdentifier("player_chapters_button")
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
@@ -784,7 +1009,7 @@ struct AudioPlayerView: View {
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.j7Border, lineWidth: 0.5)
+                .stroke(palette.border, lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.08), radius: 15, x: 0, y: 10)
     }
@@ -872,6 +1097,20 @@ struct AudioPlayerView: View {
         return "\(m)m"
     }
 
+    private func triggerToast(_ message: String) {
+        toastMessage = message
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            showToast = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                if toastMessage == message {
+                    showToast = false
+                }
+            }
+        }
+    }
+
 
 
     private func resetAutoHideTimer() {
@@ -883,7 +1122,7 @@ struct AudioPlayerView: View {
             }
         }
         autoHideWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.0, execute: workItem)
     }
 
     private func cancelAutoHideTimer() {
@@ -897,46 +1136,40 @@ struct SettingsSheet: View {
     @ObservedObject var session: ReaderSession
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var showUpgrade = false
-    @State private var showVoices = false
 
     private var supertonicReady: Bool {
         if case .ready = appState.supertonicSynthesizer.modelState { return true }
         return false
     }
-    private var appleVoices: [TTSVoice] { appState.appleVoiceScheduler.cachedVoices }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Voice") {
-                    if supertonicReady {
-                        ForEach(TTSVoice.loadAll()) { voice in voiceRow(voice) }
-                    } else {
-                        if appleVoices.isEmpty {
-                            Text("No enhanced voices available.")
+                Section("Display Mode") {
+                    Toggle(isOn: Binding(
+                        get: { appState.hideText },
+                        set: { appState.hideText = $0 }
+                    )) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Listening Mode (Hide Text)")
+                                .font(.j7SubheadlineSerifBold)
+                            Text("Replaces reading canvas with a beautiful minimal layout.")
                                 .font(.j7Caption)
                                 .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(appleVoices) { voice in voiceRow(voice) }
                         }
                     }
                 }
 
-                Section {
-                    Button {
-                        showVoices = true
-                    } label: {
-                        HStack {
-                            Label("Manage Voices...", systemImage: "waveform.badge.mic")
-                                .foregroundStyle(Color.primary)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.j7Caption2Bold)
-                                .foregroundStyle(.secondary)
+                Section("Reading Theme") {
+                    Picker("Theme", selection: Bindable(appState).selectedReadingTheme) {
+                        ForEach(ReadingTheme.allCases) { theme in
+                            Text(theme.displayTitle).tag(theme)
                         }
                     }
+                    .pickerStyle(.segmented)
                 }
 
                 if !supertonicReady {
@@ -954,8 +1187,8 @@ struct SettingsSheet: View {
 
                 Section("Speed") {
                     Picker("Playback Speed", selection: Binding(
-                        get: { session.playbackRate },
-                        set: { session.setRate($0) }
+                         get: { session.playbackRate },
+                         set: { session.setRate($0) }
                     )) {
                         Text("0.8×").tag(Float(0.8))
                         Text("1.0×").tag(Float(1.0))
@@ -967,16 +1200,87 @@ struct SettingsSheet: View {
                     .pickerStyle(.segmented)
                 }
 
-                Section("Appearance") {
-                    Picker("Theme", selection: Binding(
-                        get: { appState.selectedAppearance },
-                        set: { appState.selectedAppearance = $0 }
-                    )) {
-                        ForEach(AppAppearance.allCases) { appAppearance in
-                            Text(appAppearance.rawValue).tag(appAppearance)
+                Section("Font Family") {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(BookFontFamily.allCases) { family in
+                                Button {
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    appState.selectedFontFamily = family
+                                } label: {
+                                    VStack(spacing: 4) {
+                                        Text("Aa")
+                                            .font(Font.custom(family.postScriptName() ?? (family == .systemSerif ? "Times New Roman" : "Helvetica"), size: 20))
+                                            .fontWeight(.medium)
+                                        Text(family.displayName)
+                                            .font(.system(size: 11, weight: .semibold))
+                                    }
+                                    .frame(width: 72, height: 60)
+                                    .foregroundStyle(appState.selectedFontFamily == family ? Color.accentColor : Color.primary)
+                                    .background(
+                                        appState.selectedFontFamily == family 
+                                        ? Color.accentColor.opacity(0.12)
+                                        : Color.primary.opacity(0.04)
+                                    )
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(
+                                                appState.selectedFontFamily == family
+                                                ? Color.accentColor.opacity(0.3)
+                                                : Color.clear,
+                                                lineWidth: 1
+                                            )
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
+                        .padding(.vertical, 4)
                     }
-                    .pickerStyle(.segmented)
+                }
+
+                Section("Font Size") {
+                    HStack(spacing: 20) {
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            if appState.fontSize > 12 {
+                                appState.fontSize -= 2
+                            }
+                        } label: {
+                            Image(systemName: "textformat.size.smaller")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(Color.primary)
+                                .frame(width: 44, height: 44)
+                                .background(Color.primary.opacity(0.05), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(appState.fontSize <= 12)
+                        
+                        Spacer()
+                        
+                        Text("\(Int(appState.fontSize)) pt")
+                            .font(.system(size: 18, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.primary)
+                        
+                        Spacer()
+                        
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            if appState.fontSize < 36 {
+                                appState.fontSize += 2
+                            }
+                        } label: {
+                            Image(systemName: "textformat.size.larger")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(Color.primary)
+                                .frame(width: 44, height: 44)
+                                .background(Color.primary.opacity(0.05), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(appState.fontSize >= 36)
+                    }
+                    .padding(.vertical, 4)
                 }
 
                 if supertonicReady {
@@ -993,7 +1297,7 @@ struct SettingsSheet: View {
                     }
                 }
             }
-            .navigationTitle("Aether Settings")
+            .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -1005,36 +1309,8 @@ struct SettingsSheet: View {
                     appState.selectedEngine = .supertonic
                     session.switchToScheduler(appState.synthScheduler, voices: TTSVoice.loadAll())
                 }
-                .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                .preferredColorScheme(.light)
             }
-            .sheet(isPresented: $showVoices) {
-                VoicesView(isLocked: true)
-                    .environment(appState)
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func voiceRow(_ voice: TTSVoice) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(voice.name)
-                    .font(.j7SubheadlineSerifBold)
-                Text(voice.language == "en" ? "English" : voice.language.uppercased())
-                    .font(.j7Caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if session.voice.id == voice.id {
-                Image(systemName: "checkmark")
-                    .font(.j7SubheadlineBold)
-                    .foregroundStyle(Color.accentColor)
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            session.setVoice(voice)
         }
     }
 }
@@ -1064,6 +1340,7 @@ struct AudioChapterPickerView: View {
                         }
                     }
                 }
+                .accessibilityIdentifier("chapter_row_\(chapter.index)")
             }
             .navigationTitle("Chapters")
             .navigationBarTitleDisplayMode(.inline)
@@ -1179,16 +1456,16 @@ struct MoreOptionsSheet: View {
             .sheet(isPresented: $showVoices) {
                 VoicesView(isLocked: true)
                     .environment(appState)
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                    .preferredColorScheme(.light)
             }
             .sheet(isPresented: $showSettings) {
                 SettingsSheet(session: session)
                     .environment(appState)
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                    .preferredColorScheme(.light)
             }
             .sheet(isPresented: $showSleepTimerPicker) {
                 SleepTimerView(session: session)
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                    .preferredColorScheme(.light)
             }
         }
     }

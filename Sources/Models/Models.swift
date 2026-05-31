@@ -199,25 +199,43 @@ extension Double {
 
 // App Theme selection matching system preferences
 enum AppAppearance: String, CaseIterable, Identifiable, Codable {
-    case system = "System"
     case light = "Light"
-    case dark = "Dark"
     
     var id: String { rawValue }
     
     var colorScheme: ColorScheme? {
-        switch self {
-        case .system: return nil
-        case .light: return .light
-        case .dark: return .dark
-        }
+        return .light
+    }
+
+    var iconName: String {
+        return "sun.max"
+    }
+}
+
+enum ReadingTheme: String, CaseIterable, Identifiable, Codable {
+    case modernBlue = "modernBlue"
+    case warmIvory = "warmIvory"
+    case soothingGreen = "soothingGreen"
+    
+    var id: String { rawValue }
+    
+    var preferredColorScheme: ColorScheme? {
+        return .light
     }
 
     var iconName: String {
         switch self {
-        case .system: return "circle.lefthalf.striped.horizontal"
-        case .light: return "sun.max"
-        case .dark: return "moon"
+        case .modernBlue: return "sparkles"
+        case .warmIvory: return "cup.and.saucer"
+        case .soothingGreen: return "leaf"
+        }
+    }
+    
+    var displayTitle: String {
+        switch self {
+        case .modernBlue: return "Modern Blue"
+        case .warmIvory: return "Warm Ivory"
+        case .soothingGreen: return "Soothing Sage"
         }
     }
 }

@@ -5,6 +5,7 @@ import Accelerate
 struct VoicesView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.palette) private var palette
     @State private var samplePlayer = VoiceSamplePlayer()
     @State private var showModelDownload = false
     @State private var showEngineInfo = false
@@ -152,7 +153,7 @@ struct VoicesView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 120) // Cushion for floating bottom player deck
             }
-            .background(Color.j7AppBackground.ignoresSafeArea())
+            .background(palette.appBackground.ignoresSafeArea())
             .navigationTitle("Voices")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -175,14 +176,14 @@ struct VoicesView: View {
             }
             .sheet(isPresented: $showEngineInfo) {
                 EngineInfoSheet()
-                    .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                    .preferredColorScheme(.light)
             }
             .sheet(isPresented: $showModelDownload) {
                 ModelDownloadView(
                     synthesizer: appState.supertonicSynthesizer,
                     onReady: {}
                 )
-                .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                .preferredColorScheme(.light)
             }
             .onAppear {
                 if let activeSession = appState.activeSession {
@@ -226,10 +227,10 @@ struct VoicesView: View {
                             .padding(.horizontal, 11)
                             .padding(.vertical, 5)
                             .background(
-                                selectedLanguage == lang ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04)
+                                selectedLanguage == lang ? Color.primary : Color.primary.opacity(0.04)
                             )
                             .foregroundStyle(
-                                selectedLanguage == lang ? Color.accentColor : .secondary
+                                selectedLanguage == lang ? palette.surface : .secondary
                             )
                             .clipShape(Capsule())
                     }
@@ -343,6 +344,7 @@ struct EngineInfoSheet: View {
 // MARK: - Acoustic Card Component
 
 struct AcousticVoiceCard: View {
+    @Environment(\.palette) private var palette
     let voice: TTSVoice
     let isActive: Bool
     let isPlaying: Bool
@@ -378,11 +380,11 @@ struct AcousticVoiceCard: View {
                     Button(action: onPlayToggle) {
                         Image(systemName: isPlaying ? "stop.fill" : "play.fill")
                             .font(.j7CaptionBold)
-                            .foregroundStyle(isPlaying ? Color.primary : Color.accentColor)
+                            .foregroundStyle(Color.primary)
                             .frame(width: 32, height: 32)
                             .background(
                                 Circle()
-                                    .fill(isPlaying ? Color.primary.opacity(0.08) : Color.accentColor.opacity(0.1))
+                                    .fill(Color.primary.opacity(isPlaying ? 0.15 : 0.06))
                             )
                     }
                     .buttonStyle(.plain)
@@ -392,16 +394,16 @@ struct AcousticVoiceCard: View {
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.j7Surface)
+                    .fill(palette.surface)
             )
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(isActive ? Color.accentColor.opacity(0.04) : Color.clear)
+                    .fill(isActive ? Color.primary.opacity(0.02) : Color.clear)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(
-                        isActive ? Color.accentColor.opacity(0.25) : Color.j7Border,
+                        isActive ? Color.primary.opacity(0.45) : palette.border,
                         lineWidth: isActive ? 1.2 : 0.8
                     )
             )
@@ -421,7 +423,7 @@ struct MicroWaveformVisualizer: View {
                 TimelineView(.animation) { timeline in
                     let value = isPlaying ? amplitude(for: index, at: timeline.date.timeIntervalSince1970) : 0.15
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(isPlaying ? Color.accentColor : Color.primary.opacity(0.3))
+                        .fill(isPlaying ? Color.primary.opacity(0.85) : Color.primary.opacity(0.3))
                         .frame(width: 3, height: max(4, value * 24))
                 }
             }

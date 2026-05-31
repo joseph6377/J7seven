@@ -1,4 +1,4 @@
-# J7 Listen — EPUB Audiobook Reader
+# LysnBox — EPUB Audiobook Reader
 
 An iOS app that reads EPUB books aloud using fully on-device AI text-to-speech. No cloud calls, no per-minute cost, no audio stored to disk. Import an EPUB, tap play, and the app synthesizes speech in real time as you listen.
 
@@ -13,7 +13,7 @@ An iOS app that reads EPUB books aloud using fully on-device AI text-to-speech. 
 - **App Store & iCloud Compliant** — Voice models reside in the standard `Library/Caches/` sandbox directory rather than `Documents/` to satisfy Apple's App Store Review guidelines regarding backup sizes. Includes an automatic, self-healing model migration and automatic cleanup of legacy directories.
 - **Privacy Manifest Compliant** — Ships with an official `PrivacyInfo.xcprivacy` manifest defining required usage declarations for system APIs (`UserDefaults`, `FileTimestamp`, and `DiskSpace`).
 - **Cooperative Thread Safe** — CPU-intensive ONNX model loading and synchronous synthesis (`tts.call`) are systematically offloaded to user-initiated Grand Central Dispatch (GCD) background queues rather than the cooperative Swift Concurrency thread pool, resolving `unsafeForcedSync` runtime warnings and avoiding thread starvation.
-- **Universal EPUB Handler ("Open In" Support)** — Registered system-wide as an EPUB document viewer. Tap or share an `.epub` file from external applications (Files, Safari, Mail, Slack) to instantly launch J7 Listen and import the book.
+- **Universal EPUB Handler ("Open In" Support)** — Registered system-wide as an EPUB document viewer. Tap or share an `.epub` file from external applications (Files, Safari, Mail, Slack) to instantly launch LysnBox and import the book.
 - **Strategy A Pre-bundled Asset Support** — Detects and registers pre-packaged voice models within the App Bundle to bypass downloading and enable instant offline play out of the box.
 - **Editorial UI/UX Player Overhaul** — Features an immersive serif reading canvas with automatic control auto-hiding, glowing paragraph active-sentence highlights, precise word-level highlight focus boxes, segments for speed/inference quality, and a collapsible/expandable transport card.
 - **Paragraph-Level Cursor Tracking** — Current chapter and paragraph focus are persisted locally in real time so you can resume exactly where you left off.
@@ -136,7 +136,7 @@ Sources/
   Views/
     ContentView.swift           Frosted bottom-navigation tab container.
     Library/
-      AboutView.swift           Compact 'About J7 Listen' branding sheet containing website links.
+      AboutView.swift           Compact 'About LysnBox' branding sheet containing website links.
       ImportView.swift          UI picker options for import parameters and downloading weights.
       LibraryView.swift         Beautiful Grid shelf displaying book covers, reading times, and search.
       VoicesView.swift          Interactive custom voice tester with text pre-generation.
@@ -187,7 +187,7 @@ English, Spanish, French, German, Italian, Portuguese, Japanese, and Korean.
 
 ## Unit Testing
 
-J7 Listen is backed by an automated testing suite to verify structural pipelines.
+LysnBox is backed by an automated testing suite to verify structural pipelines.
 
 ### Running Tests from terminal:
 ```bash

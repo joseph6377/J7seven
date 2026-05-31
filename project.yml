@@ -51,7 +51,7 @@ targets:
     info:
       path: BooksAppV2/Info.plist
       properties:
-        CFBundleDisplayName: "J7 Listen"
+        CFBundleDisplayName: "LysnBox"
         CFBundleName: BooksAppV2
         CFBundleIdentifier: in.josepht.booksappv2
         CFBundleVersion: "8"
@@ -73,6 +73,7 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: "in.josepht.booksappv2"
             CFBundleURLSchemes:
+              - lysnbox
               - j7
               - booksapp
         CFBundleDocumentTypes:
@@ -122,11 +123,12 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: in.josepht.booksappv2
         PRODUCT_NAME: BooksAppV2
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CURRENT_PROJECT_VERSION: 8
         MARKETING_VERSION: 1.0
         INFOPLIST_FILE: BooksAppV2/Info.plist
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: "537JMFBG2B"
+        # DEVELOPMENT_TEAM: "537JMFBG2B"
         
   J7ShareExtension:
     type: app-extension
@@ -141,7 +143,7 @@ targets:
         PRODUCT_NAME: J7ShareExtension
         INFOPLIST_FILE: Sources/Services/Web/ShareExtension/Info.plist
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: "537JMFBG2B"
+        # DEVELOPMENT_TEAM: "537JMFBG2B"
         CURRENT_PROJECT_VERSION: 8
         MARKETING_VERSION: 1.0
     entitlements:
@@ -162,14 +164,28 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
 
+  BooksAppV2UITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: UITests
+    dependencies:
+      - target: BooksAppV2
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   BooksAppV2:
     build:
       targets:
         BooksAppV2: all
         BooksAppV2Tests: [test]
+        BooksAppV2UITests: [test]
         J7ShareExtension: all
     test:
       targets:
         - BooksAppV2Tests
+        - BooksAppV2UITests
 

@@ -32,6 +32,7 @@ final class ReaderSession: ObservableObject {
     @Published var steps: Int = 4
     @Published var activeWordRange: NSRange? = nil
     @Published var playbackError: (any Error)? = nil
+    @Published var bookmarkedParagraphs: Set<String> = []
 
     var currentChapterDuration: Double {
         guard currentChapterIndex < document.chapters.count else { return 0.0 }
@@ -298,6 +299,15 @@ final class ReaderSession: ObservableObject {
         currentParagraphIndex = index
         activeWordRange = nil
         updateNowPlayingMetadata()
+    }
+
+    func toggleBookmarkForCurrentParagraph() {
+        let key = "\(currentChapterIndex)-\(currentParagraphIndex)"
+        if bookmarkedParagraphs.contains(key) {
+            bookmarkedParagraphs.remove(key)
+        } else {
+            bookmarkedParagraphs.insert(key)
+        }
     }
 
     func setRate(_ rate: Float) {

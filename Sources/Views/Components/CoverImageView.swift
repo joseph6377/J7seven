@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CoverImageView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.palette) private var palette
     let id: UUID
     @State private var coverData: Data?
     @State private var bookTitle: String = ""
@@ -44,10 +45,10 @@ struct CoverImageView: View {
                     .scaledToFill()
             } else if format == .pastedText {
                 ZStack {
-                    Color.accentColor.opacity(0.08)
+                    palette.accent.opacity(0.08)
                     Image(systemName: "doc.text")
                         .font(.j7TitleLarge)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(palette.accent)
                 }
             } else {
                 placeholderGradient

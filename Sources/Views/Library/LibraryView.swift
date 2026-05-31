@@ -10,6 +10,7 @@ enum LibraryTab {
 
 struct LibraryView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.palette) private var palette
     @State private var selectedTab: LibraryTab = .all
     @State private var activeTypeFilter: SourceFormat? = nil
     @State private var searchText = ""
@@ -48,7 +49,7 @@ struct LibraryView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            Color.j7AppBackground
+            palette.appBackground
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -169,16 +170,18 @@ struct LibraryView: View {
             appState.refresh()
             loadFavorites()
             
-            // Check if user has seen welcome download prompt and model is not downloaded
-            let hasSeenWelcome = UserDefaults.standard.bool(forKey: "hasSeenWelcomeDownloadPrompt")
-            if !hasSeenWelcome {
-                if case .notDownloaded = appState.supertonicSynthesizer.modelState {
-                    showWelcomeDownload = true
-                }
-            } else {
-                let hasSeenShowcase = UserDefaults.standard.bool(forKey: "library.onboarding.showcased")
-                if !hasSeenShowcase {
-                    showOnboardingCarousel = true
+            if !ProcessInfo.processInfo.arguments.contains("-SkipOnboarding") {
+                // Check if user has seen welcome download prompt and model is not downloaded
+                let hasSeenWelcome = UserDefaults.standard.bool(forKey: "hasSeenWelcomeDownloadPrompt")
+                if !hasSeenWelcome {
+                    if case .notDownloaded = appState.supertonicSynthesizer.modelState {
+                        showWelcomeDownload = true
+                    }
+                } else {
+                    let hasSeenShowcase = UserDefaults.standard.bool(forKey: "library.onboarding.showcased")
+                    if !hasSeenShowcase {
+                        showOnboardingCarousel = true
+                    }
                 }
             }
         }
@@ -190,11 +193,8 @@ struct LibraryView: View {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     showAboutSheet = true
                 } label: {
-                    Image("AppLogo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 34)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    AppLogoView()
+                        .frame(width: 34, height: 34)
                 }
                 .buttonStyle(.plain)
             }
@@ -222,12 +222,12 @@ struct LibraryView: View {
                     }
                 }
             )
-            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            .preferredColorScheme(.light)
         }
         .sheet(isPresented: $showAboutSheet) {
             AboutView()
                 .presentationDetents([.medium])
-                .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                .preferredColorScheme(.light)
         }
         .sheet(isPresented: $showWelcomeDownload) {
             WelcomeModelDownloadView(
@@ -245,7 +245,7 @@ struct LibraryView: View {
                 }
             )
             .interactiveDismissDisabled()
-            .preferredColorScheme(appState.selectedAppearance.colorScheme)
+            .preferredColorScheme(.light)
         }
         .onChange(of: showWelcomeDownload) { _, newValue in
             if !newValue {
@@ -257,7 +257,7 @@ struct LibraryView: View {
         }
         .fullScreenCover(isPresented: $showOnboardingCarousel) {
             OnboardingCarouselView(isPresented: $showOnboardingCarousel)
-                .preferredColorScheme(appState.selectedAppearance.colorScheme)
+                .preferredColorScheme(.light)
         }
     }
 
@@ -368,10 +368,10 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.j7Surface, in: RoundedRectangle(cornerRadius: 12))
+                .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.j7Border, lineWidth: 0.5)
+                        .stroke(palette.border, lineWidth: 0.5)
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -384,10 +384,10 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.j7Surface, in: RoundedRectangle(cornerRadius: 12))
+                .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.j7Border, lineWidth: 0.5)
+                        .stroke(palette.border, lineWidth: 0.5)
                 )
             }
         }
@@ -412,7 +412,7 @@ struct LibraryView: View {
         }
         .padding(4)
         .background(Color.primary.opacity(0.04), in: Capsule())
-        .overlay(Capsule().stroke(Color.j7Border, lineWidth: 0.5))
+        .overlay(Capsule().stroke(palette.border, lineWidth: 0.5))
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 12)
@@ -431,7 +431,7 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity)
                 .background(
                     Capsule()
-                        .fill(selectedTab == tab ? Color.j7Surface : Color.clear)
+                        .fill(selectedTab == tab ? palette.surface : Color.clear)
                         .shadow(
                             color: selectedTab == tab ? Color.black.opacity(0.08) : Color.clear,
                             radius: 3, x: 0, y: 1
@@ -448,34 +448,30 @@ struct LibraryView: View {
             VStack(spacing: 0) {
                 categoryRow(
                     title: "Web Articles",
-                    icon: "globe",
                     count: filteredBooks.filter { $0.format == .web }.count,
                     format: .web
                 )
                 categoryRow(
                     title: "EPUB Books",
-                    icon: "book.closed.fill",
                     count: filteredBooks.filter { $0.format == .epub }.count,
                     format: .epub
                 )
                 categoryRow(
                     title: "PDF Documents",
-                    icon: "doc.richtext.fill",
                     count: filteredBooks.filter { $0.format == .pdf }.count,
                     format: .pdf
                 )
                 categoryRow(
                     title: "Pasted Text",
-                    icon: "text.quote",
                     count: filteredBooks.filter { $0.format == .pastedText }.count,
                     format: .pastedText
                 )
             }
-            .background(Color.j7Surface)
+            .background(palette.surface)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.j7Border, lineWidth: 1)
+                    .stroke(palette.border, lineWidth: 1)
             )
             .padding(.horizontal, 16)
             .padding(.top, 16)
@@ -483,7 +479,7 @@ struct LibraryView: View {
         }
     }
     
-    private func categoryRow(title: String, icon: String, count: Int, format: SourceFormat) -> some View {
+    private func categoryRow(title: String, count: Int, format: SourceFormat) -> some View {
         VStack(spacing: 0) {
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -491,26 +487,7 @@ struct LibraryView: View {
                     activeTypeFilter = format
                 }
             } label: {
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        categoryColor(for: format),
-                                        categoryColor(for: format).opacity(0.78)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 36, height: 36)
-                            .shadow(color: categoryColor(for: format).opacity(0.25), radius: 4, x: 0, y: 2)
-                        Image(systemName: icon)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-
+                HStack {
                     Text(title)
                         .font(.j7BodyBold)
                         .foregroundStyle(.primary)
@@ -541,8 +518,8 @@ struct LibraryView: View {
             
             if format != .pastedText {
                 Divider()
-                    .padding(.leading, 66)
-                    .background(Color.j7Border)
+                    .padding(.leading, 16) // Adjusted to align perfectly with clean typography margins!
+                    .background(palette.border)
             }
         }
     }
@@ -566,12 +543,7 @@ struct LibraryView: View {
     }
 
     private func categoryColor(for format: SourceFormat) -> Color {
-        switch format {
-        case .epub: return .orange
-        case .pdf: return .red
-        case .web: return .blue
-        case .pastedText: return .purple
-        }
+        Color.accentColor
     }
 
     private func emptyCategoryState(for format: SourceFormat) -> some View {
@@ -608,28 +580,12 @@ struct LibraryView: View {
                     .font(.j7SubheadlineBold)
                     .foregroundStyle(Color.primary)
                     .frame(width: 32, height: 32)
-                    .background(isSearchActive ? Color.primary.opacity(0.12) : Color.primary.opacity(0.05), in: Circle())
             }
             .buttonStyle(.plain)
 
 
 
-            Menu {
-                Picker("Appearance", selection: Bindable(appState).selectedAppearance) {
-                    ForEach(AppAppearance.allCases) { appAppearance in
-                        Label(appAppearance.rawValue, systemImage: appAppearance.iconName)
-                            .tag(appAppearance)
-                    }
-                }
-            } label: {
-                Image(systemName: appState.selectedAppearance.iconName)
-                    .font(.j7SubheadlineBold)
-                    .foregroundStyle(Color.primary)
-                    .frame(width: 32, height: 32)
-                    .background(Color.primary.opacity(0.05), in: Circle())
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .buttonStyle(.plain)
+
 
             if case .notDownloaded = appState.supertonicSynthesizer.modelState {
                 Button {
@@ -640,7 +596,6 @@ struct LibraryView: View {
                         .font(.j7SubheadlineBold)
                         .foregroundStyle(Color.primary)
                         .frame(width: 32, height: 32)
-                        .background(Color.primary.opacity(0.05), in: Circle())
                 }
                 .buttonStyle(.plain)
             }
@@ -677,7 +632,6 @@ struct LibraryView: View {
                     .font(.j7SubheadlineBold)
                     .foregroundStyle(.secondary)
                     .frame(width: 32, height: 32)
-                    .background(Color.primary.opacity(0.04), in: Circle())
             }
             .buttonStyle(.plain)
         }
@@ -739,6 +693,7 @@ struct LibraryView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("book_cell_\(entry.title)")
                 .contextMenu {
                     favoriteButton(id: entry.id)
                     
@@ -766,6 +721,7 @@ struct LibraryView: View {
                     BookRowCell(entry: entry)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("book_cell_\(entry.title)")
                 .contextMenu {
                     favoriteButton(id: entry.id)
                     
@@ -837,9 +793,12 @@ struct LibraryView: View {
                 Circle()
                     .fill(Color.accentColor.opacity(0.05))
                     .frame(width: 190, height: 190)
-                Image(systemName: "waveform")
-                    .font(.j7Hero)
-                    .foregroundStyle(Color.accentColor.opacity(0.7))
+                Image("TabLibraryIcon")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 60, height: 60)
+                    .foregroundStyle(Color.accentColor.opacity(0.70))
             }
             .padding(.bottom, 28)
 
@@ -987,22 +946,14 @@ private struct BookRowCell: View {
 // MARK: - Onboarding Walkthrough Carousel
 
 struct OnboardingCarouselView: View {
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.palette) private var palette
     @Binding var isPresented: Bool
     @State private var selection = 0
-    
-    private var backgroundColor: Color {
-        if colorScheme == .light {
-            return Color(red: 0.98, green: 0.97, blue: 0.95)
-        } else {
-            return Color(red: 0.05, green: 0.05, blue: 0.05)
-        }
-    }
     
     var body: some View {
         ZStack {
             // Immersive clean background
-            backgroundColor
+            palette.appBackground
                 .ignoresSafeArea()
             
             // Subtle ambient backdrop glow
@@ -1041,7 +992,7 @@ struct OnboardingCarouselView: View {
                     carouselSlide(
                         tag: 0,
                         illustration: welcomeIllustration,
-                        title: "J7 Listen",
+                        title: "LysnBox",
                         subtitle: "Your Private Audiobook Sanctuary",
                         bodyText: "Welcome to a 100% offline, on-device reading experience. Let's take a quick 10-second tour of your library."
                     )
@@ -1052,7 +1003,7 @@ struct OnboardingCarouselView: View {
                         illustration: importIllustration,
                         title: "Import Your Books",
                         subtitle: "DRM-Free Ebooks & PDFs Ready For Speech",
-                        bodyText: "Tap the floating blue '+' button in the bottom right corner of your library to import any DRM-free EPUB or PDF directly from your files."
+                        bodyText: "Tap the center 'Import' button in the tab bar to import any DRM-free EPUB or PDF directly from your files."
                     )
                     
                     // Slide 3: Personalize Voices
@@ -1061,7 +1012,7 @@ struct OnboardingCarouselView: View {
                         illustration: voicesIllustration,
                         title: "Premium Voices",
                         subtitle: "Studio Narrators Across 8 Languages",
-                        bodyText: "Tap the waveform icon in the navigation bar to preview and download premium multi-lingual offline voices."
+                        bodyText: "Tap the 'Voices' button in the tab bar to preview and download premium multi-lingual offline voices."
                     )
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))

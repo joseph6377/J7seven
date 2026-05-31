@@ -12,6 +12,7 @@ struct MiniPlayerView: View {
 
 private struct MiniPlayerContent: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.palette) private var palette
     @ObservedObject var session: ReaderSession
 
     // Overall book progress by paragraph count
@@ -129,13 +130,7 @@ private struct MiniPlayerContent: View {
                 ZStack(alignment: .leading) {
                     Rectangle().fill(Color.primary.opacity(0.08))
                     Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.accentColor, Color.purple.opacity(0.8)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
+                        .fill(palette.accent)
                         .frame(width: max(0, geo.size.width * overallProgress))
                         .animation(.linear(duration: 0.35), value: overallProgress)
                 }
@@ -146,9 +141,9 @@ private struct MiniPlayerContent: View {
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
+                .stroke(palette.border, lineWidth: 0.8)
         )
-        .shadow(color: .black.opacity(0.12), radius: 15, x: 0, y: 5)
+        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
         .accessibilityElement(children: .contain)
     }
 }

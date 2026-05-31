@@ -70,8 +70,18 @@ extension Font {
     }
 
     /// Unified parametrized builder for user-customizable reader font sizes
-    public static func j7BookContent(size: Double, weight: Font.Weight = .regular) -> Font {
-        .system(size: CGFloat(size), weight: weight, design: .serif)
+    public static func j7BookContent(size: Double, family: BookFontFamily, weight: Font.Weight = .regular) -> Font {
+        if let postScript = family.postScriptName(weight: weight) {
+            return .custom(postScript, size: CGFloat(size))
+        } else {
+            let design: Font.Design = family == .systemSerif ? .serif : .default
+            return .system(size: CGFloat(size), weight: weight, design: design)
+        }
+    }
+
+    /// Dynamic builder for chapter headers and title layouts
+    public static func j7BookTitle(size: Double, family: BookFontFamily) -> Font {
+        j7BookContent(size: size, family: family, weight: .bold)
     }
 
     // MARK: - Subheadlines
@@ -124,5 +134,69 @@ extension Font {
     /// Ultra-small bold labels/badges (9pt bold sans)
     public static var j7Caption2Bold: Font {
         .system(size: 9, weight: .bold, design: .default)
+    }
+}
+
+// MARK: - Book Font Family Catalog (2026 E-Reader Standard)
+public enum BookFontFamily: String, CaseIterable, Identifiable, Codable {
+    case charter = "charter"
+    case georgia = "georgia"
+    case baskerville = "baskerville"
+    case palatino = "palatino"
+    case systemSerif = "systemSerif"
+    case avenirNext = "avenirNext"
+    case systemSans = "systemSans"
+    
+    public var id: String { rawValue }
+    
+    public var displayName: String {
+        switch self {
+        case .charter: return "Charter"
+        case .georgia: return "Georgia"
+        case .baskerville: return "Baskerville"
+        case .palatino: return "Palatino"
+        case .systemSerif: return "New York"
+        case .avenirNext: return "Avenir Next"
+        case .systemSans: return "SF Pro"
+        }
+    }
+    
+    /// Returns the exact PostScript name for dynamic custom font loading
+    public func postScriptName(weight: Font.Weight = .regular) -> String? {
+        switch self {
+        case .charter:
+            switch weight {
+            case .bold: return "Charter-Bold"
+            case .medium, .semibold: return "Charter-Roman" // fallback if medium not loaded
+            default: return "Charter-Roman"
+            }
+        case .georgia:
+            switch weight {
+            case .bold: return "Georgia-Bold"
+            case .medium, .semibold: return "Georgia"
+            default: return "Georgia"
+            }
+        case .baskerville:
+            switch weight {
+            case .bold: return "Baskerville-Bold"
+            case .medium, .semibold: return "Baskerville"
+            default: return "Baskerville"
+            }
+        case .palatino:
+            switch weight {
+            case .bold: return "Palatino-Bold"
+            case .medium, .semibold: return "Palatino-Roman"
+            default: return "Palatino-Roman"
+            }
+        case .avenirNext:
+            switch weight {
+            case .bold: return "AvenirNext-Bold"
+            case .semibold: return "AvenirNext-DemiBold"
+            case .medium: return "AvenirNext-Medium"
+            default: return "AvenirNext-Regular"
+            }
+        default:
+            return nil // Uses native SwiftUI system font handles
+        }
     }
 }
