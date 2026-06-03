@@ -162,6 +162,7 @@
 		D3733D82D9C509FB55AB2661 /* BooksAppV2.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BooksAppV2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB7634AD4B842D8591081DD7 /* EpubTextParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubTextParserTests.swift; sourceTree = "<group>"; };
 		DEAB5E54AEBAEE7318FBBE4F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E0B8724AE38AD905382D0CFE /* onnxruntime */ = {isa = PBXFileReference; lastKnownFileType = folder; name = onnxruntime; path = Packages/onnxruntime; sourceTree = SOURCE_ROOT; };
 		E97757B67B974D69D2BF9345 /* TTSVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSVoice.swift; sourceTree = "<group>"; };
 		E9C70791099EC45E3ECB4613 /* BooksAppShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BooksAppShareExtension.entitlements; sourceTree = "<group>"; };
 		EBD3451DCCA48F6BA1D91E6F /* SharePreprocessor.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = SharePreprocessor.js; sourceTree = "<group>"; };
@@ -205,6 +206,7 @@
 			isa = PBXGroup;
 			children = (
 				74BDD32D40F9AAE0C3F98E12 /* BooksAppV2 */,
+				D654BAF9771258BD2F53F566 /* Packages */,
 				C00ECF201EC94C4B498B61D3 /* ShareExtension */,
 				7064500BC3AB0B9ABA902054 /* Sources */,
 				CF3A071B627DA58D035199F9 /* Tests */,
@@ -364,6 +366,14 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
+		D654BAF9771258BD2F53F566 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				E0B8724AE38AD905382D0CFE /* onnxruntime */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
 		DE83BF209804843C85DF964F /* Models */ = {
 			isa = PBXGroup;
 			children = (
@@ -513,7 +523,7 @@
 			packageReferences = (
 				958233B592DD2DC414DB4D92 /* XCRemoteSwiftPackageReference "swift-readability" */,
 				32EB13D2DDFFBB779D2F4D6B /* XCRemoteSwiftPackageReference "SwiftSoup" */,
-				BFF7106533AB2D4C521EDD37 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */,
+				30973FF47AEB4357E35F1496 /* XCLocalSwiftPackageReference "Packages/onnxruntime" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C817B063E90FF27890CABE02 /* Products */;
@@ -1005,6 +1015,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		30973FF47AEB4357E35F1496 /* XCLocalSwiftPackageReference "Packages/onnxruntime" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/onnxruntime;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		32EB13D2DDFFBB779D2F4D6B /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -1022,20 +1039,11 @@
 				kind = branch;
 			};
 		};
-		BFF7106533AB2D4C521EDD37 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/microsoft/onnxruntime-swift-package-manager";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.16.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		2767889294040521DB955DC6 /* onnxruntime */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = BFF7106533AB2D4C521EDD37 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */;
 			productName = onnxruntime;
 		};
 		8DA5A188A5EFF5ED61AA7E6A /* SwiftReadability */ = {

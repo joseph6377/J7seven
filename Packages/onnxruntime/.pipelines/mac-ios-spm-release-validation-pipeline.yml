@@ -1,0 +1,24 @@
+  jobs:
+  - job: j
+    displayName: "Test with released ORT native pod"
+
+    pool:
+      vmImage: "macOS-14"
+
+    timeoutInMinutes: 60
+
+    steps:
+    - template: templates/use-xcode-version.yml
+
+    # Note: Running xcodebuild test on `onnxruntime-Package` scheme will perform swift tests for both OnnxRuntimeBindings
+    # and OnnxRuntimeExtensions targets.
+    - script: |
+        set -e -x
+        xcodebuild test -scheme onnxruntime-Package -destination 'platform=iOS Simulator,name=iPhone 16'
+        xcodebuild test -scheme onnxruntime-Package -destination 'platform=macOS'
+      workingDirectory: "$(Build.SourcesDirectory)"
+      displayName: "Test Package.swift usage"
+
+    - template: templates/component-governance-component-detection-steps.yml
+      parameters:
+        condition: 'succeeded'
