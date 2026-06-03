@@ -561,6 +561,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		65424663B68D92D40CB07DE4 /* Fix ONNX Runtime MinimumOSVersion */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);

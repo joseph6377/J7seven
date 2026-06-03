@@ -15,7 +15,7 @@
     {
       "appearances" : [
         {
-          "appearance" : "any-dark",
+          "appearance" : "luminosity",
           "value" : "dark"
         }
       ],

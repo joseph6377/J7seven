@@ -99,6 +99,7 @@ targets:
                 - application/epub+zip
     postBuildScripts:
       - name: Fix ONNX Runtime MinimumOSVersion
+        basedOnDependencyAnalysis: false
         script: |
           set -e
           FRAMEWORKS_PATH="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}"

@@ -637,14 +637,10 @@ final class VoiceSamplePlayer: NSObject, AVSpeechSynthesizerDelegate {
                     }
                     
                     playerNode.play()
-                    playerNode.scheduleBuffer(buffer, at: nil, options: [], completionHandler: { [weak self] in
-                        Task { @MainActor in
-                            guard let self else { return }
-                            if self.playingVoiceId == voice.id {
-                                self.playingVoiceId = nil
-                            }
-                        }
-                    })
+                    await playerNode.scheduleBuffer(buffer, at: nil, options: [])
+                    if self.playingVoiceId == voice.id {
+                        self.playingVoiceId = nil
+                    }
                 } catch {
                     print("[VoiceSamplePlayer] Preview synthesis error: \(error)")
                     playingVoiceId = nil
