@@ -68,7 +68,10 @@ struct CoverImageView: View {
                     )
             }
         }
-        .task {
+        .task(id: id) {
+            coverData = nil
+            bookTitle = ""
+            format = nil
             if let doc = appState.libraryService.loadDocument(id: id) {
                 coverData = doc.coverImageData
                 bookTitle = doc.title

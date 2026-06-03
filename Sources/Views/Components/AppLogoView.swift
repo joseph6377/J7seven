@@ -73,7 +73,7 @@ struct J7LogoShape: Shape {
 
 struct AppLogoView: View {
     // Kept for backward compatibility, though the brand asset is multi-color
-    var color: Color = Color(hex: "#0340c7")
+    var color: Color = Color(hex: "#3B5284")
     
     var body: some View {
         Image("AppLogo")

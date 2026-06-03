@@ -23,7 +23,7 @@ final class HeadlessWebViewFetcher: NSObject, WKNavigationDelegate {
             self.timeoutTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(20))
                 guard !Task.isCancelled else { return }
-                await self?.fail(with: URLError(.timedOut))
+                self?.fail(with: URLError(.timedOut))
             }
             
             webView.load(URLRequest(url: url))

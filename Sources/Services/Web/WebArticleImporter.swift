@@ -45,7 +45,22 @@ final class WebArticleImporter {
         
         let parsedBook: ParsedBook
         
-        if let jsonLd = jsonLd, jsonLd.articleBody.count > 200 {
+        let isFlattenedSingleParagraph: Bool = {
+            guard let body = jsonLd?.articleBody else { return false }
+            // If the body is long but has absolutely no newlines, it's definitely a flattened paragraph.
+            if body.count > 300 && !body.contains("\n") && !body.contains("\r") {
+                return true
+            }
+            // Or if it's very long and has very few newlines (e.g., less than 3 paragraphs for 1000+ characters),
+            // it's likely a flattened block of text that lacks rich paragraph structure.
+            let newlineCount = body.components(separatedBy: .newlines).count - 1
+            if body.count > 1000 && newlineCount < 3 {
+                return true
+            }
+            return false
+        }()
+        
+        if let jsonLd = jsonLd, jsonLd.articleBody.count > 200, !isFlattenedSingleParagraph {
             print("[WebArticleImporter] Stage 2 successful: JSON-LD articleBody extracted. Skipping downstream readability stages.")
             
             // --- Stage 5: TTS Normalization ---
@@ -61,7 +76,11 @@ final class WebArticleImporter {
                 normalizedText: normalizedBody
             )
         } else {
-            print("[WebArticleImporter] Stage 2 skipped or insufficient: Falling back to Readability.")
+            if isFlattenedSingleParagraph {
+                print("[WebArticleImporter] JSON-LD articleBody is a single massive flattened string (>1000 chars, no newlines). Falling back to Readability to preserve rich paragraph structure.")
+            } else {
+                print("[WebArticleImporter] Stage 2 skipped or insufficient: Falling back to Readability.")
+            }
             
             // --- Stage 3: Readability Extraction ---
             progress(.extracting)

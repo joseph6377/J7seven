@@ -71,73 +71,44 @@ struct AudioPlayerView: View {
                             // Chapter Title Header
                             if firstIsTitle {
                                 let isCurrent = session.currentParagraphIndex == 0
-                                if isCurrent {
-                                    let attributed = makeAttributedParagraph(chapter.title)
-                                    Text(attributed)
-                                        .font(.j7BookTitle(size: 26, family: appState.selectedFontFamily))
-                                        .foregroundStyle(palette.textPrimary)
-                                        .lineSpacing(6)
-                                        .padding(.horizontal, 24)
-                                        .padding(.top, 10)
-                                        .padding(.bottom, 16)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                                .fill(palette.activeParagraphBg)
-                                        )
-                                        .background(
-                                            GeometryReader { geo in
-                                                Color.clear
-                                                    .preference(key: ActiveParagraphFramePreferenceKey.self, value: geo.frame(in: .global))
+                                let attributedTitle = isCurrent ? makeAttributedParagraph(chapter.title) : AttributedString(chapter.title)
+                                Text(attributedTitle)
+                                    .font(.j7BookTitle(size: 26, family: appState.selectedFontFamily))
+                                    .foregroundStyle(palette.textPrimary)
+                                    .lineSpacing(6)
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, 10)
+                                    .padding(.bottom, 16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .fill(isCurrent ? palette.activeParagraphBg : Color.clear)
+                                    )
+                                    .background(
+                                        GeometryReader { geo in
+                                            Color.clear
+                                                .preference(key: ActiveParagraphFramePreferenceKey.self, value: isCurrent ? geo.frame(in: .global) : .zero)
+                                        }
+                                    )
+                                    .contentShape(Rectangle())
+                                    .gesture(
+                                        TapGesture(count: 2)
+                                            .onEnded {
+                                                session.jumpToParagraph(0)
                                             }
-                                        )
-                                        .contentShape(Rectangle())
-                                        .gesture(
-                                            TapGesture(count: 2)
+                                            .exclusively(before: TapGesture(count: 1)
                                                 .onEnded {
-                                                    session.jumpToParagraph(0)
-                                                }
-                                                .exclusively(before: TapGesture(count: 1)
-                                                    .onEnded {
-                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                                            areControlsVisible.toggle()
-                                                        }
-                                                        if areControlsVisible {
-                                                            resetAutoHideTimer()
-                                                        } else {
-                                                            cancelAutoHideTimer()
-                                                        }
+                                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                        areControlsVisible.toggle()
                                                     }
-                                                )
-                                        )
-                                        .id(0)
-                                } else {
-                                    Text(chapter.title)
-                                        .font(.j7BookTitle(size: 26, family: appState.selectedFontFamily))
-                                        .foregroundStyle(palette.textPrimary)
-                                        .padding(.horizontal, 24)
-                                        .padding(.top, 10)
-                                        .padding(.bottom, 16)
-                                        .contentShape(Rectangle())
-                                        .gesture(
-                                            TapGesture(count: 2)
-                                                .onEnded {
-                                                    session.jumpToParagraph(0)
-                                                }
-                                                .exclusively(before: TapGesture(count: 1)
-                                                    .onEnded {
-                                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                                            areControlsVisible.toggle()
-                                                        }
-                                                        if areControlsVisible {
-                                                            resetAutoHideTimer()
-                                                        } else {
-                                                            cancelAutoHideTimer()
-                                                        }
+                                                    if areControlsVisible {
+                                                        resetAutoHideTimer()
+                                                    } else {
+                                                        cancelAutoHideTimer()
                                                     }
-                                                )
-                                        )
-                                        .id(0)
-                                }
+                                                }
+                                            )
+                                    )
+                                    .id(0)
                             } else {
                                 Text(chapter.title)
                                     .font(.j7BookTitle(size: 26, family: appState.selectedFontFamily))
@@ -239,34 +210,12 @@ struct AudioPlayerView: View {
                         .contentShape(Capsule())
                         .onTapGesture {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            let currentParaIdx = session.currentParagraphIndex
-                            let chapters = session.document.chapters
-                            let progress: Double
-                            if session.currentChapterIndex < chapters.count {
-                                let chapter = chapters[session.currentChapterIndex]
-                                if currentParaIdx < chapter.paragraphs.count {
-                                    let para = chapter.paragraphs[currentParaIdx]
-                                    if let range = session.activeWordRange, para.text.count > 0 {
-                                        progress = Double(range.location) / Double(para.text.count)
-                                    } else {
-                                        progress = 0.0
-                                    }
-                                } else {
-                                    progress = 0.0
-                                }
-                            } else {
-                                progress = 0.0
-                            }
-                            
                             isParagraphScrolledAway = false
-                            lastScrolledParagraphIndex = currentParaIdx
+                            lastScrolledParagraphIndex = nil
                             lastScrolledSentenceRange = nil
-                            lastScrolledProgress = progress
-                            lastScrollTime = Date()
+                            lastScrollTime = Date.distantPast
                             
-                            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-                                scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: progress))
-                            }
+                            checkAndCenterHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
                         }
                     }
                     .padding(.bottom, geometry.safeAreaInsets.bottom + 20)
@@ -327,16 +276,16 @@ struct AudioPlayerView: View {
                     resetAutoHideTimer()
                 }
                 
-                // As decided: if user manually scrolled away, do NOT snap back!
+                // If user manually scrolled away, do NOT snap back!
                 guard !isParagraphScrolledAway else { return }
                 
                 lastScrolledParagraphIndex = newIdx
                 lastScrolledSentenceRange = nil
-                lastScrolledProgress = 0.0
-                lastScrollTime = Date()
                 
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                    scrollProxy.scrollTo(newIdx, anchor: .center)
+                // Smooth initial scroll fallback towards the focus line (anchor: 0.15)
+                // This starts the transition smoothly before geometry is measured
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.85)) {
+                    scrollProxy.scrollTo(newIdx, anchor: UnitPoint(x: 0.5, y: 0.15))
                 }
             }
             .onChange(of: session.currentChapterIndex) { _, newChIdx in
@@ -356,6 +305,8 @@ struct AudioPlayerView: View {
             .onChange(of: session.state) { _, newState in
                 if newState == .playing {
                     resetAutoHideTimer()
+                    // Snapping back on play resume establishes perfect reader flow!
+                    isParagraphScrolledAway = false
                 } else {
                     cancelAutoHideTimer()
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -379,6 +330,11 @@ struct AudioPlayerView: View {
             .onPreferenceChange(ActiveParagraphFramePreferenceKey.self) { rect in
                 guard rect != .zero else { return }
                 self.activeParagraphRect = rect
+                
+                // Align viewport focus precisely using the resolved paragraph geometry!
+                if !isParagraphScrolledAway && session.state == .playing {
+                    checkAndCenterHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
+                }
             }
             .sheet(isPresented: $showSettings) {
                 SettingsSheet(session: session)
@@ -421,70 +377,44 @@ struct AudioPlayerView: View {
 
     @ViewBuilder
     private func paragraphView(para: Paragraph, pIdx: Int, isCurrent: Bool) -> some View {
-        if isCurrent {
-            let attributed = makeAttributedParagraph(para.text)
-            Text(attributed)
-                .font(.j7BookContent(size: appState.fontSize, family: appState.selectedFontFamily, weight: .medium))
-                .foregroundStyle(palette.textPrimary)
-                .lineSpacing(6)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(palette.activeParagraphBg)
-                )
-                .background(
-                    GeometryReader { geo in
-                        Color.clear
-                            .preference(key: ActiveParagraphFramePreferenceKey.self, value: geo.frame(in: .global))
+        let attributed = isCurrent ? makeAttributedParagraph(para.text) : AttributedString(para.text)
+        Text(attributed)
+            .font(.j7BookContent(size: appState.fontSize, family: appState.selectedFontFamily, weight: isCurrent ? .medium : .regular))
+            .foregroundStyle(isCurrent ? palette.textPrimary : palette.textSecondary)
+            .lineSpacing(6)
+            .padding(.horizontal, 24)
+            .padding(.vertical, isCurrent ? 14 : 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isCurrent ? palette.activeParagraphBg : Color.clear)
+            )
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(key: ActiveParagraphFramePreferenceKey.self, value: isCurrent ? geo.frame(in: .global) : .zero)
+                }
+            )
+            .contentShape(Rectangle())
+            .gesture(
+                TapGesture(count: 2)
+                    .onEnded {
+                        session.jumpToParagraph(pIdx)
                     }
-                )
-                .contentShape(Rectangle())
-                .gesture(
-                    TapGesture(count: 2)
+                    .exclusively(before: TapGesture(count: 1)
                         .onEnded {
-                            session.jumpToParagraph(pIdx)
-                        }
-                        .exclusively(before: TapGesture(count: 1)
-                            .onEnded {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    areControlsVisible.toggle()
-                                }
-                                if areControlsVisible {
-                                    resetAutoHideTimer()
-                                } else {
-                                    cancelAutoHideTimer()
-                                }
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                areControlsVisible.toggle()
                             }
-                        )
-                )
-        } else {
-            Text(para.text)
-                .font(.j7BookContent(size: appState.fontSize, family: appState.selectedFontFamily))
-                .foregroundStyle(palette.textSecondary)
-                .lineSpacing(6)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 10)
-                .contentShape(Rectangle())
-                .gesture(
-                    TapGesture(count: 2)
-                        .onEnded {
-                            session.jumpToParagraph(pIdx)
-                        }
-                        .exclusively(before: TapGesture(count: 1)
-                            .onEnded {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    areControlsVisible.toggle()
-                                }
-                                if areControlsVisible {
-                                    resetAutoHideTimer()
-                                } else {
-                                    cancelAutoHideTimer()
-                                }
+                            if areControlsVisible {
+                                resetAutoHideTimer()
+                            } else {
+                                cancelAutoHideTimer()
                             }
-                        )
-                )
-        }
+                        }
+                    )
+            )
+            .opacity(isCurrent ? 1.0 : 0.35)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isCurrent)
     }
 
     private func amplitude(for index: Int, at time: TimeInterval) -> CGFloat {
@@ -616,9 +546,9 @@ struct AudioPlayerView: View {
     private func checkAndCenterHighlight(scrollProxy: ScrollViewProxy, screenHeight: CGFloat) {
         guard !isParagraphScrolledAway, session.state == .playing else { return }
         
-        // Cooldown check to prevent animation feedback loop (e.g. 0.8 seconds between programmatic scrolls)
         let now = Date()
-        guard now.timeIntervalSince(lastScrollTime) > 0.8 else { return }
+        // Extremely short cooldown (e.g. 0.3s) just to prevent double triggers during initial layout passes
+        guard now.timeIntervalSince(lastScrollTime) > 0.3 else { return }
         
         let currentParaIdx = session.currentParagraphIndex
         let chapters = session.document.chapters
@@ -626,28 +556,45 @@ struct AudioPlayerView: View {
         let chapter = chapters[session.currentChapterIndex]
         guard currentParaIdx < chapter.paragraphs.count else { return }
         let para = chapter.paragraphs[currentParaIdx]
+        let currentSentenceRange = activeSentenceRange(in: para.text, for: session.activeWordRange)
+        
+        // Scroll ONLY if the sentence range has actually changed, OR the paragraph has changed
+        guard currentSentenceRange != lastScrolledSentenceRange || lastScrolledParagraphIndex != currentParaIdx else { return }
+        
+        guard screenHeight > 0, activeParagraphRect != .zero else { return }
+        
+        let paragraphHeight = activeParagraphRect.height
+        let viewportHeight = screenHeight
+        let targetViewportAnchor = 0.35 // Mathematically locks the focus line at 35% from the top of the viewport
         
         let progress: Double
-        if let range = session.activeWordRange, para.text.count > 0 {
+        if let sentenceRange = currentSentenceRange, para.text.count > 0 {
+            // Align the start of the sentence to the focal line
+            progress = Double(sentenceRange.location) / Double(para.text.count)
+        } else if let range = session.activeWordRange, para.text.count > 0 {
             progress = Double(range.location) / Double(para.text.count)
         } else {
             progress = 0.0
         }
         
-        guard screenHeight > 0, activeParagraphRect != .zero else { return }
+        // Mathematical Scroll Anchor Equation:
+        // A aligns the progress fraction of the paragraph with the targetViewportAnchor fraction of the viewport.
+        let diff = paragraphHeight - viewportHeight
+        let anchorY: Double
+        if abs(diff) > 1.0 {
+            let calculated = (progress * paragraphHeight - targetViewportAnchor * viewportHeight) / diff
+            anchorY = max(0.0, min(1.0, calculated))
+        } else {
+            anchorY = progress
+        }
         
-        let highlightY = activeParagraphRect.minY + (activeParagraphRect.height * progress)
-        let relativeY = highlightY / screenHeight
+        lastScrollTime = now
+        lastScrolledParagraphIndex = currentParaIdx
+        lastScrolledSentenceRange = currentSentenceRange
+        lastScrolledProgress = progress
         
-        // Dynamic edge threshold: Scroll to center ONLY if the active highlighted word is about to move off-screen (outside [0.15, 0.85] band)
-        if relativeY < 0.15 || relativeY > 0.85 {
-            lastScrollTime = now
-            lastScrolledParagraphIndex = currentParaIdx
-            lastScrolledProgress = progress
-            
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: max(0.0, min(1.0, progress))))
-            }
+        withAnimation(.spring(response: 0.65, dampingFraction: 0.82)) {
+            scrollProxy.scrollTo(currentParaIdx, anchor: UnitPoint(x: 0.5, y: anchorY))
         }
     }
 
@@ -671,9 +618,14 @@ struct AudioPlayerView: View {
     private func makeAttributedParagraph(_ para: String) -> AttributedString {
         var attributed = AttributedString(para)
         
+        // Default: soft contrast for all text in active paragraph to establish focus
+        attributed.foregroundColor = palette.textPrimary.opacity(0.45)
+        
         guard let nsRange = session.activeWordRange,
               nsRange.location != NSNotFound,
               nsRange.location + nsRange.length <= para.utf16.count else {
+            // Fall back to full contrast when not actively playing a word
+            attributed.foregroundColor = palette.textPrimary
             return attributed
         }
         
@@ -687,16 +639,17 @@ struct AudioPlayerView: View {
             }
         }
         
-        // 2. Style the active sentence with a beautiful subtle glowing background color
+        // 2. Style the active sentence with high-contrast foreground and soft theme-specific background tint
         if let sentenceNSRange = activeSentenceRange,
            let sentenceRange = Range(sentenceNSRange, in: para) {
             if let start = AttributedString.Index(sentenceRange.lowerBound, within: attributed),
                let end = AttributedString.Index(sentenceRange.upperBound, within: attributed) {
-                attributed[start..<end].backgroundColor = palette.activeSentenceBg
+                attributed[start..<end].foregroundColor = palette.textPrimary
+                attributed[start..<end].backgroundColor = palette.activeSentenceBg.opacity(0.35)
             }
         }
         
-        // 3. Style the active word with a gorgeous, high-contrast matte focus box
+        // 3. Style the active word with a gorgeous matte focus block
         if let range = Range(nsRange, in: para) {
             if let start = AttributedString.Index(range.lowerBound, within: attributed),
                let end = AttributedString.Index(range.upperBound, within: attributed) {
@@ -1093,8 +1046,11 @@ struct AudioPlayerView: View {
     private func formatSecondsLong(_ seconds: Double) -> String {
         let h = Int(seconds) / 3600
         let m = Int(seconds) % 3600 / 60
+        let s = Int(seconds) % 60
         if h > 0 { return "\(h)h \(m)m" }
-        return "\(m)m"
+        if m > 0 { return "\(m)m" }
+        if s > 0 { return "\(s)s" }
+        return "0s"
     }
 
     private func triggerToast(_ message: String) {

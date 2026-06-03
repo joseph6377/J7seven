@@ -68,7 +68,7 @@ struct JunkPatternStripper {
             let style = (try? el.attr("style"))?.lowercased() ?? ""
             let isFixedOrZIndex = style.contains("position: fixed") || style.contains("position:fixed") || style.contains("z-index")
             
-            let text = (try? el.ownText())?.lowercased() ?? ""
+            let text = el.ownText().lowercased()
             let id = el.id()
             let className = (try? el.className())?.lowercased() ?? ""
             
@@ -317,7 +317,7 @@ struct JunkPatternStripper {
             
             if let fnText = footnotesById[id], !fnText.isEmpty {
                 var parent = link.parent()
-                while parent != nil && (try? parent?.tagName()) != "p" {
+                while parent != nil && parent?.tagName() != "p" {
                     parent = parent?.parent()
                 }
                 

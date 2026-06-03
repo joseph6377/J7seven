@@ -116,13 +116,28 @@ extension LibraryEntry {
         }
         wordCount = totalWords
 
-        // Calculate progress based on paragraphs
+        // Calculate progress based on paragraphs, accounting for firstIsTitle to prevent misleading progress on title reading
+        let firstChapter = doc.chapters.first
+        let firstIsTitle = firstChapter != nil && !firstChapter!.paragraphs.isEmpty &&
+            firstChapter!.paragraphs[0].text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare(doc.title.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+
         let totalParagraphs = doc.chapters.reduce(0) { $0 + $1.paragraphs.count }
         if totalParagraphs > 0 {
-            let before = doc.chapters
-                .prefix(doc.cursor.chapterIndex)
-                .reduce(0) { $0 + $1.paragraphs.count }
-            progress = Double(before + doc.cursor.paragraphIndex) / Double(totalParagraphs)
+            if firstIsTitle && totalParagraphs > 1 {
+                let adjustedTotal = totalParagraphs - 1
+                let before = doc.chapters
+                    .prefix(doc.cursor.chapterIndex)
+                    .reduce(0) { $0 + $1.paragraphs.count }
+                let currentPos = before + doc.cursor.paragraphIndex
+                let adjustedPos = max(0, currentPos - 1)
+                progress = Double(adjustedPos) / Double(adjustedTotal)
+            } else {
+                let before = doc.chapters
+                    .prefix(doc.cursor.chapterIndex)
+                    .reduce(0) { $0 + $1.paragraphs.count }
+                progress = Double(before + doc.cursor.paragraphIndex) / Double(totalParagraphs)
+            }
         } else {
             progress = 0.0
         }
@@ -148,14 +163,20 @@ extension LibraryEntry {
         let wordsPerMinute = 150.0
         let totalMinutes = Double(remainingWords) / wordsPerMinute
         let hours = Int(totalMinutes / 60.0)
-        let mins = Int(totalMinutes.truncatingRemainder(dividingBy: 60.0))
+        let mins = Int(totalMinutes.rounded(.up).truncatingRemainder(dividingBy: 60.0))
 
-        if hours > 0 {
-            estimatedTimeLeft = "\(hours) hrs left"
-        } else if mins > 0 {
-            estimatedTimeLeft = "\(mins) mins left"
-        } else {
+        let lastChapter = doc.chapters.last
+        let lastParaIndex = (lastChapter?.paragraphs.count ?? 1) - 1
+        let isAtEnd = doc.cursor.chapterIndex >= doc.chapters.count - 1 && doc.cursor.paragraphIndex >= lastParaIndex && remainingWords == 0
+
+        if isAtEnd || remainingWords == 0 {
             estimatedTimeLeft = "Finished"
+        } else if hours > 0 {
+            estimatedTimeLeft = "\(hours) hr\(hours > 1 ? "s" : "") \(mins) min\(mins != 1 ? "s" : "") left"
+        } else if mins > 0 {
+            estimatedTimeLeft = "\(mins) min\(mins != 1 ? "s" : "") left"
+        } else {
+            estimatedTimeLeft = "Under 1 min left"
         }
 
         // Calculate words read for duration estimation (real-world actual hours read/listened)
@@ -246,14 +267,40 @@ extension SavedDocument {
     var detectedLanguage: String {
         let recognizer = NLLanguageRecognizer()
         var sampleText = ""
+        
+        let totalChapters = chapters.count
+        guard totalChapters > 0 else { return "en" }
+        
+        // Sample paragraphs from the middle of the book to avoid metadata headers or licenses
+        let middleChapterIndex = totalChapters / 2
+        let targetChapters = [
+            chapters[middleChapterIndex],
+            chapters[min(middleChapterIndex + 1, totalChapters - 1)]
+        ]
+        
         var count = 0
-        for chapter in chapters {
+        for chapter in targetChapters {
             for paragraph in chapter.paragraphs {
-                sampleText += paragraph.text + " "
-                count += 1
-                if count >= 6 { break }
+                let text = paragraph.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if text.count > 30 {
+                    sampleText += text + " "
+                    count += 1
+                    if count >= 10 { break }
+                }
             }
-            if count >= 6 { break }
+            if count >= 10 { break }
+        }
+        
+        // Fall back to the first chapter if we didn't find enough substantial paragraphs in the middle
+        if count < 3 {
+            for paragraph in chapters[0].paragraphs {
+                let text = paragraph.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if text.count > 15 {
+                    sampleText += text + " "
+                    count += 1
+                    if count >= 10 { break }
+                }
+            }
         }
         
         let trimmed = sampleText.trimmingCharacters(in: .whitespacesAndNewlines)

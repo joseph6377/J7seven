@@ -1,5 +1,6 @@
 import AVFoundation
-import MediaPlayer
+@preconcurrency import MediaPlayer
+import UIKit
 
 @MainActor
 @Observable
@@ -14,6 +15,10 @@ final class PlayerService {
     private var wasPlayingBeforeInterruption = false
 
     private let nowPlayingQueue = DispatchQueue(label: "in.josepht.BooksApp.NowPlaying")
+    
+    // WORKAROUND: Dummy player and session to bypass iOS 26 MPNowPlayingSession workaround / MPNowPlayingInfoCenter.default() crash
+    private let dummyPlayer = AVPlayer()
+    private var nowPlayingSession: MPNowPlayingSession?
 
     var onRemotePlay:                   (@MainActor () -> Void)?
     var onRemotePause:                  (@MainActor () -> Void)?
@@ -24,7 +29,7 @@ final class PlayerService {
     init() {
         setupEngine()
         setupAudioSession()
-        setupRemoteCommands()
+        setupNowPlayingSession()
     }
 
     private func setupEngine() {
@@ -37,6 +42,18 @@ final class PlayerService {
         engine.connect(speedControl, to: engine.mainMixerNode, format: format)
 
         engine.prepare()
+    }
+    
+    private func setupNowPlayingSession() {
+        if #available(iOS 16.0, *) {
+            // Provide the idle AVPlayer to initialize the isolated session successfully
+            let session = MPNowPlayingSession(players: [dummyPlayer])
+            self.nowPlayingSession = session
+            setupRemoteCommands(commandCenter: session.remoteCommandCenter)
+        } else {
+            // Fallback for older iOS versions
+            setupRemoteCommands(commandCenter: MPRemoteCommandCenter.shared())
+        }
     }
 
     func schedule(_ buffer: AVAudioPCMBuffer, id: String, completion: @escaping @Sendable (String) -> Void) {
@@ -76,17 +93,24 @@ final class PlayerService {
 
     func pause() {
         playerNode.pause()
+        engine.pause() // Ensure hardware I/O pauses alongside the node
         isPlaying = false
         updateNowPlaying()
     }
 
     func stop() {
         playerNode.stop()
+        engine.stop()
         isPlaying = false
         hasAudioData = false
 
+        let session = self.nowPlayingSession
         nowPlayingQueue.async {
-            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            if #available(iOS 16.0, *), let session = session {
+                session.nowPlayingInfoCenter.nowPlayingInfo = nil
+            } else {
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            }
         }
 
         do {
@@ -143,8 +167,7 @@ final class PlayerService {
 
     // MARK: - Remote Commands & Now Playing
 
-    private func setupRemoteCommands() {
-        let c = MPRemoteCommandCenter.shared()
+    private func setupRemoteCommands(commandCenter c: MPRemoteCommandCenter) {
         c.playCommand.addTarget { [weak self] _ in
             Task { @MainActor in
                 if let handler = self?.onRemotePlay { handler() } else { self?.play() }
@@ -198,9 +221,17 @@ final class PlayerService {
     ) {
         let playing = isPlaying ?? self.isPlaying
         let rate = self.playbackRate
+        let session = self.nowPlayingSession
 
         nowPlayingQueue.async {
-            var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+            let infoCenter: MPNowPlayingInfoCenter
+            if #available(iOS 16.0, *), let session = session {
+                infoCenter = session.nowPlayingInfoCenter
+            } else {
+                infoCenter = MPNowPlayingInfoCenter.default()
+            }
+            
+            var info = infoCenter.nowPlayingInfo ?? [:]
             if let title { info[MPMediaItemPropertyTitle] = title }
             if let author { info[MPMediaItemPropertyArtist] = author }
             if let cover, let image = UIImage(data: cover) {
@@ -212,10 +243,13 @@ final class PlayerService {
             if let elapsedTime {
                 info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsedTime
             }
-            info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? Double(rate) : 0
-            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-
-            MPNowPlayingInfoCenter.default().playbackState = playing ? .playing : .paused
+            
+            // This is the sole controller of the Lock Screen Play/Pause icon UI. 
+            info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? Double(rate) : 0.0
+            
+            infoCenter.nowPlayingInfo = info
+            
+            // Explicitly REMOVED `.playbackState` to prevent background UI desyncs caused by missing entitlements.
         }
     }
 }

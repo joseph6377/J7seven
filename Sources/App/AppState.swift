@@ -144,6 +144,8 @@ final class AppState {
 
     func openDocument(_ entry: LibraryEntry) {
         if let doc = libraryService.loadDocument(id: entry.id) {
+            activeSession?.pause()
+            activeSession?.scheduler.cancelPlayback()
             activeSession = ReaderSession(
                 document: doc,
                 player: playerService,

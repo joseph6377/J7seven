@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 enum AppTab {
     case library
+    case importHub
     case voices
 }
 
@@ -14,7 +15,6 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .library
     
     // Shared Import States
-    @State private var showImportDrawer = false
     @State private var showFilePicker = false
     @State private var showURLImport = false
     @State private var showPasteSheet = false
@@ -33,6 +33,12 @@ struct ContentView: View {
     @State private var activePayload: SharedPayload? = nil
     @State private var autoplayOnComplete = false
 
+    // State for Proximity Magnification Tab Bar
+    @State private var dragX: CGFloat? = nil
+    @State private var dragY: CGFloat? = nil
+    @State private var isDragging = false
+    @State private var actualTabBarWidth: CGFloat = 340
+
     var body: some View {
         let palette = ThemePalette.resolve(appState.selectedReadingTheme, system: colorScheme)
         return ZStack(alignment: .bottom) {
@@ -41,6 +47,12 @@ struct ContentView: View {
                     switch selectedTab {
                     case .library:
                         LibraryView()
+                    case .importHub:
+                        ImportView(
+                            onUploadTap: { showFilePicker = true },
+                            onURLTap: { showURLImport = true },
+                            onWriteTextTap: { showPasteSheet = true }
+                        )
                     case .voices:
                         VoicesView(isLocked: false, showDoneButton: false)
                     }
@@ -48,20 +60,27 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .bottom) {
-                customTabBar
+                Color.clear
+                    .frame(height: appState.activeSession != nil && !appState.showPlayer ? 120 : 64)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.85), value: appState.activeSession != nil && !appState.showPlayer)
             }
             
-            // Floating Mini Player docked perfectly 12 points above the custom tab bar
-            if appState.activeSession != nil && !appState.showPlayer {
-                VStack(spacing: 12) {
-                    Spacer()
+            // Floating UI Overlay Container: Mini Player & Premium Dock Pill Tab Bar
+            VStack(spacing: 4) {
+                Spacer()
+                
+                if appState.activeSession != nil && !appState.showPlayer {
                     MiniPlayerView()
-                        .padding(.horizontal, 16)
-                    Color.clear
-                        .frame(height: 56) // Matches height of custom tab bar content
+                        .padding(.horizontal, 12)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                
+                dockPillTabBar
+                    .padding(.horizontal, 12)
             }
+            .padding(.bottom, 14)
+            .ignoresSafeArea(edges: .bottom)
+            .ignoresSafeArea(.keyboard)
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.activeSession != nil && !appState.showPlayer)
         .fullScreenCover(isPresented: Bindable(appState).showPlayer) {
@@ -84,6 +103,10 @@ struct ContentView: View {
                         let payload = try SharedContainer.read(id: payloadId)
                         SharedContainer.delete(id: payloadId)
                         
+                        // Dismiss player and pause any active playback to allow the import progress sheet to present immediately
+                        appState.activeSession?.pause()
+                        appState.showPlayer = false
+                        
                         self.autoplayOnComplete = autoplay
                         self.activePayload = payload
                     } catch {
@@ -95,7 +118,22 @@ struct ContentView: View {
                    let queryItem = components.queryItems?.first(where: { $0.name == "url" }),
                    let urlString = queryItem.value,
                    let targetURL = URL(string: urlString) {
+                    
+                    // Dismiss player and pause any active playback to allow the import progress sheet to present immediately
+                    appState.activeSession?.pause()
+                    appState.showPlayer = false
+                    
                     urlToImport = IdentifiableURL(url: targetURL)
+                }
+            } else if url.isFileURL {
+                // Dismiss player and pause any active playback to allow the import progress sheet to present immediately
+                appState.activeSession?.pause()
+                appState.showPlayer = false
+                
+                Task { @MainActor in
+                    let accessed = url.startAccessingSecurityScopedResource()
+                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                    await importBook(url: url)
                 }
             }
         }
@@ -201,81 +239,152 @@ struct ContentView: View {
             }
             .preferredColorScheme(.light)
         }
-        .sheet(isPresented: $showImportDrawer) {
-            ImportDrawerSheet(
-                onSelectFile: { showFilePicker = true },
-                onSelectURL: { showURLImport = true },
-                onSelectPasteText: { showPasteSheet = true }
-            )
-            .presentationDetents([.height(315), .medium])
-            .preferredColorScheme(.light)
-        }
+        // No longer using bottom sheet drawer for import
         .preferredColorScheme(.light)
         .environment(\.palette, palette)
     }
     
     // MARK: - Subviews
     
-    private var customTabBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-                .background(Color.primary.opacity(0.08))
+    private var dockPillTabBar: some View {
+        HStack(spacing: 0) {
+            tabBarSlot(index: 0, title: "Library", icon: "TabLibraryIcon", isSystemIcon: false, tab: .library)
             
-            HStack(spacing: 0) {
-                // Custom Symmetrical Library Icon (Books + Headphones Vector)
-                tabButton(tab: .library, title: "Library", icon: "TabLibraryIcon")
-                
-                // Symmetrical Flat Center Import Tab Button (Triggers Drawer Sheet)
-                Button {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    showImportDrawer = true
-                } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: showImportDrawer ? "plus.circle.fill" : "plus.circle")
-                            .font(.title3)
-                        Text("Import")
-                            .font(.j7CaptionBold)
-                    }
-                    .foregroundStyle(showImportDrawer ? Color.accentColor : Color.primary.opacity(0.40))
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
-                
-                // Custom Symmetrical Voices Icon (Abstract Sound Ring Vector)
-                tabButton(tab: .voices, title: "Voices", icon: "TabVoicesIcon")
-            }
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            tabBarSlot(index: 1, title: "Import", icon: selectedTab == .importHub ? "plus.circle.fill" : "plus.circle", isSystemIcon: true, tab: .importHub)
+            
+            tabBarSlot(index: 2, title: "Voices", icon: "TabVoicesIcon", isSystemIcon: false, tab: .voices)
         }
+        .frame(height: 64)
+        .background(
+            ZStack {
+                // Sliding Active Tab Background (Distinct Contrast Capsule)
+                Capsule()
+                    .fill(Color.primary.opacity(0.06))
+                    .frame(width: (actualTabBarWidth / 3.0) - 20, height: 48)
+                    .offset(x: selectedTab == .library ? -actualTabBarWidth / 3.0 : (selectedTab == .importHub ? 0 : actualTabBarWidth / 3.0))
+                    .animation(.spring(response: 0.28, dampingFraction: 0.8), value: selectedTab)
+            }
+        )
         .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(
+                    LinearGradient(
+                        colors: [.white.opacity(0.24), .white.opacity(0.08)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1.0
+                )
+        )
+        .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 6)
+        .shadow(color: Color.black.opacity(0.04), radius: 24, x: 0, y: 12)
+        .frame(maxWidth: 500)
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear {
+                        actualTabBarWidth = geo.size.width
+                    }
+                    .onChange(of: geo.size.width) { _, newWidth in
+                        actualTabBarWidth = newWidth
+                    }
+            }
+        )
+        .gesture(tabGesture)
     }
     
-    private func tabButton(tab: AppTab, title: String, icon: String) -> some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                selectedTab = tab
+    private func tabBarSlot(index: Int, title: String, icon: String, isSystemIcon: Bool, tab: AppTab) -> some View {
+        let scale = scaleForSlot(index)
+        
+        return VStack(spacing: 3) {
+            if isSystemIcon {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .frame(width: 24, height: 24)
+            } else {
+                Image(icon)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
             }
-        } label: {
-            VStack(spacing: 4) {
-                if icon.hasPrefix("Tab") {
-                    Image(icon)
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 24, height: 24)
-                } else {
-                    Image(systemName: icon)
-                        .font(.title3)
+            
+            Text(title)
+                .font(.j7CaptionBold)
+        }
+        .foregroundStyle(Color.accentColor)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scaleEffect(scale)
+        .animation(.spring(response: 0.22, dampingFraction: 0.75), value: scale)
+        .contentShape(Rectangle())
+    }
+    
+    // MARK: - Magnification & Gestures
+    
+    private var tabGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+                isDragging = true
+                dragX = value.location.x
+                dragY = value.location.y
+            }
+            .onEnded { value in
+                if let x = dragX, let y = dragY {
+                    let verticalOffset = abs(y - 33)
+                    if verticalOffset <= 55 {
+                        let slotIndex = Int(round((x / actualTabBarWidth) * 3.0 - 0.5))
+                        triggerSlot(min(max(slotIndex, 0), 2))
+                    }
                 }
                 
-                Text(title)
-                    .font(.j7CaptionBold)
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                    isDragging = false
+                    dragX = nil
+                    dragY = nil
+                }
             }
-            .foregroundStyle(selectedTab == tab ? Color.accentColor : Color.primary.opacity(0.40))
-            .frame(maxWidth: .infinity)
+    }
+    
+    private func scaleForSlot(_ index: Int) -> CGFloat {
+        guard isDragging, let x = dragX, let y = dragY else { return 1.0 }
+        if abs(y - 33) > 55 { return 1.0 }
+        
+        let slotCenter = actualTabBarWidth * CGFloat(2 * index + 1) / 6.0
+        let distance = abs(slotCenter - x)
+        
+        let maxBoost: CGFloat = 0.28
+        let widthFactor: CGFloat = 60.0
+        return 1.0 + maxBoost * exp(-pow(distance, 2) / (2 * pow(widthFactor, 2)))
+    }
+    
+    private func triggerSlot(_ index: Int) {
+        switch index {
+        case 0:
+            if selectedTab != .library {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    selectedTab = .library
+                }
+            }
+        case 1:
+            if selectedTab != .importHub {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    selectedTab = .importHub
+                }
+            }
+        case 2:
+            if selectedTab != .voices {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    selectedTab = .voices
+                }
+            }
+        default:
+            break
         }
-        .buttonStyle(.plain)
     }
     
     // MARK: - Helper Methods

@@ -31,6 +31,7 @@ final class SynthScheduler: PlaybackScheduler {
     private var lastNotifiedParagraphCursor: PlaybackCursor?
     private var synthesisTask: Task<Void, Never>?
     private var isPlaying = false
+    private var isSynthesisComplete = false
 
     private var scheduledCount: Int = 0
     private var firstAudioFired = false
@@ -112,6 +113,7 @@ final class SynthScheduler: PlaybackScheduler {
         playbackSessionId += 1
         scheduledQueue.removeAll()
         lastNotifiedParagraphCursor = nil
+        isSynthesisComplete = false
 
         synthesisTask = Task {
             await runSynthesisLoop(voice: voice)
@@ -247,6 +249,10 @@ final class SynthScheduler: PlaybackScheduler {
                 synthCursor.paragraphIndex = 0
             }
         }
+        
+        if !Task.isCancelled && isPlaying && synthCursor.chapterIndex >= doc.chapters.count {
+            isSynthesisComplete = true
+        }
     }
 
     private func handleSentenceFinished(id: String, sessionId: Int) {
@@ -264,9 +270,11 @@ final class SynthScheduler: PlaybackScheduler {
             let lastChapter = doc.chapters.last
             let lastParaIndex = (lastChapter?.paragraphs.count ?? 1) - 1
             if lastCursor.chapterIndex >= doc.chapters.count - 1 && lastCursor.paragraphIndex >= lastParaIndex {
-                isPlaying = false
-                wordHighlightTask?.cancel()
-                onWordRangeChanged?(.init(location: 0, length: 0))
+                if isSynthesisComplete {
+                    isPlaying = false
+                    wordHighlightTask?.cancel()
+                    onWordRangeChanged?(.init(location: 0, length: 0))
+                }
             }
         }
     }
@@ -319,8 +327,6 @@ final class SynthScheduler: PlaybackScheduler {
             wordTimings.append((paragraphWordRange, currentStart, currentStart + wordDuration))
             currentStart += wordDuration
         }
-        
-        let startTime = Date()
         
         wordHighlightTask = Task { [weak self] in
             var accumulatedElapsed: Double = 0.0

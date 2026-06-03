@@ -10,21 +10,28 @@ enum LibraryTab {
 
 struct LibraryView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.palette) private var palette
     @State private var selectedTab: LibraryTab = .all
     @State private var activeTypeFilter: SourceFormat? = nil
     @State private var searchText = ""
     @State private var isSearchActive = false
+    @FocusState private var isSearchFieldFocused: Bool
     @State private var showModelDownload = false
     @AppStorage("library.isGridView") private var isGridView = false
     @State private var favorites: Set<UUID> = Set()
-    @State private var showStats = false
     
     @State private var pendingImportURL: URL?
     @State private var pendingEntry: LibraryEntry? = nil
     @State private var showAboutSheet = false
     @State private var showWelcomeDownload = false
     @State private var showOnboardingCarousel = false
+
+    // True only once the premium voice model is fully downloaded and ready.
+    // The download affordances persist through downloading/error/cancelled states
+    // so the user can always resume; they disappear only when the model is ready.
+    private var isModelDownloaded: Bool {
+        if case .ready = appState.supertonicSynthesizer.modelState { return true }
+        return false
+    }
 
     // Computed list of books filtered by search query
     private var filteredBooks: [LibraryEntry] {
@@ -49,7 +56,7 @@ struct LibraryView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            palette.appBackground
+            Color.j7AppBackground
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -58,109 +65,82 @@ struct LibraryView: View {
                 }
 
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        // Stats Pill & Toggleable Stats Dashboard (2026 Standards)
-                        HStack {
-                            Button {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    showStats.toggle()
-                                }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text("⚡️")
-                                        .font(.j7Caption)
-                                    Text(appState.formattedTotalHoursRead)
-                                        .font(.j7CaptionBold)
-                                    Image(systemName: "chevron.down")
-                                        .font(.j7Caption2Bold)
-                                        .rotationEffect(.degrees(showStats ? 180 : 0))
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.accentColor.opacity(showStats ? 0.15 : 0.08), in: Capsule())
-                                .foregroundStyle(Color.accentColor)
-                            }
-                            .buttonStyle(.plain)
-                            
-                            Spacer()
+                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        // Section 1: Top Sanctuary Greetings & Dynamic Cockpit
+                        if !isSearchActive {
+                            quickResumeCockpit
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .padding(.bottom, 6)
                         
-                        if showStats {
-                            statsDashboard
-                                .transition(.move(edge: .top).combined(with: .opacity))
-                        }
-
-                        // Filter chips matching the new editorial style
-                        filterChipsSection
-
-                        // Content area based on top filters
-                        Group {
-                            switch selectedTab {
-                            case .all:
-                                if filteredBooks.isEmpty {
-                                    if !searchText.isEmpty {
-                                        noResultsState
-                                    } else {
-                                        emptyState
-                                    }
-                                } else {
-                                    bookContent(for: filteredBooks)
-                                }
-                            case .favorites:
-                                if favoritedBooks.isEmpty {
-                                    favoritesEmptyState
-                                } else {
-                                    bookContent(for: favoritedBooks)
-                                }
-                            case .byType:
-                                if let formatFilter = activeTypeFilter {
-                                    let formatFilteredBooks = filteredBooks.filter { $0.format == formatFilter }
-                                    VStack(spacing: 0) {
-                                        // Category drill-down title header with back button
-                                        HStack {
-                                            Button {
-                                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                                                    activeTypeFilter = nil
-                                                }
-                                            } label: {
-                                                HStack(spacing: 4) {
-                                                    Image(systemName: "chevron.left")
-                                                    Text("Categories")
-                                                }
-                                                .font(.j7SubheadlineSemibold)
-                                                .foregroundStyle(Color.accentColor)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 6)
-                                                .background(Color.accentColor.opacity(0.08), in: Capsule())
-                                            }
-                                            .buttonStyle(.plain)
-                                            
-                                            Spacer()
-                                            
-                                            Text(categoryTitle(for: formatFilter))
-                                                .font(.j7SubheadlineSerifBold)
-                                                .foregroundStyle(.primary)
-                                        }
-                                        .padding(.horizontal, 16)
-                                        .padding(.top, 8)
-                                        .padding(.bottom, 4)
-                                        
-                                        if formatFilteredBooks.isEmpty {
-                                            emptyCategoryState(for: formatFilter)
+                        // Section 2: Shelf Pinned Header & Book Lists
+                        Section {
+                            Group {
+                                switch selectedTab {
+                                case .all:
+                                    if filteredBooks.isEmpty {
+                                        if !searchText.isEmpty {
+                                            noResultsState
                                         } else {
-                                            bookContent(for: formatFilteredBooks)
+                                            emptyState
                                         }
+                                    } else {
+                                        bookContent(for: filteredBooks)
                                     }
-                                } else {
-                                    categoryListSection
+                                case .favorites:
+                                    if favoritedBooks.isEmpty {
+                                        favoritesEmptyState
+                                    } else {
+                                        bookContent(for: favoritedBooks)
+                                    }
+                                case .byType:
+                                    if let formatFilter = activeTypeFilter {
+                                        let formatFilteredBooks = filteredBooks.filter { $0.format == formatFilter }
+                                        VStack(spacing: 0) {
+                                            // Category drill-down title header with back button
+                                            HStack {
+                                                Button {
+                                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                                                        activeTypeFilter = nil
+                                                    }
+                                                } label: {
+                                                    HStack(spacing: 4) {
+                                                        Image(systemName: "chevron.left")
+                                                        Text("Categories")
+                                                    }
+                                                    .font(.j7SubheadlineSemibold)
+                                                    .foregroundStyle(Color.accentColor)
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 6)
+                                                    .background(Color.accentColor.opacity(0.08), in: Capsule())
+                                                }
+                                                .buttonStyle(.plain)
+                                                
+                                                Spacer()
+                                                
+                                                Text(categoryTitle(for: formatFilter))
+                                                    .font(.j7SubheadlineSerifBold)
+                                                    .foregroundStyle(.primary)
+                                            }
+                                            .padding(.horizontal, 16)
+                                            .padding(.top, 8)
+                                            .padding(.bottom, 4)
+                                            
+                                            if formatFilteredBooks.isEmpty {
+                                                emptyCategoryState(for: formatFilter)
+                                            } else {
+                                                bookContent(for: formatFilteredBooks)
+                                            }
+                                        }
+                                    } else {
+                                        categoryListSection
+                                    }
                                 }
                             }
+                        } header: {
+                            filterChipsSection
                         }
+
+                        libraryFooter
                     }
                 }
             }
@@ -186,17 +166,15 @@ struct LibraryView: View {
             }
         }
         .navigationTitle("Library")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    showAboutSheet = true
-                } label: {
-                    AppLogoView()
-                        .frame(width: 34, height: 34)
-                }
-                .buttonStyle(.plain)
+            if #available(iOS 26.0, *) {
+                logoToolbarItem
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                logoToolbarItem
             }
             ToolbarItem(placement: .primaryAction) {
                 toolbarActions
@@ -263,6 +241,14 @@ struct LibraryView: View {
 
     // MARK: - Subviews
 
+    private var logoToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            AppLogoView()
+                .frame(width: 34, height: 34)
+                .accessibilityHidden(true)
+        }
+    }
+
     private var searchField: some View {
         HStack(spacing: 8) {
             HStack(spacing: 6) {
@@ -275,7 +261,8 @@ struct LibraryView: View {
                     .textFieldStyle(.plain)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                
+                    .focused($isSearchFieldFocused)
+
                 if !searchText.isEmpty {
                     Button {
                         searchText = ""
@@ -290,20 +277,28 @@ struct LibraryView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(Color.primary.opacity(0.05), in: Capsule())
-            
-            Button("Cancel") {
+
+            Button {
                 withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                     isSearchActive = false
                     searchText = ""
                 }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.j7SubheadlineBold)
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 32, height: 32)
             }
-            .font(.j7SubheadlineBold)
-            .foregroundStyle(Color.primary)
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .transition(.move(edge: .top).combined(with: .opacity))
+        .onAppear {
+            DispatchQueue.main.async {
+                isSearchFieldFocused = true
+            }
+        }
     }
 
     private var timeOfDayGreeting: String {
@@ -332,63 +327,135 @@ struct LibraryView: View {
         return timeOfDayGreeting
     }
 
-    private var statsDashboard: some View {
+    private var mostRecentBook: LibraryEntry? {
+        appState.books.sorted(by: { $0.lastOpenedAt > $1.lastOpenedAt }).first
+    }
+
+    private var quickResumeCockpit: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Greeting & Sanctuary title
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(greetingText)
                         .font(.j7Title3Serif)
                         .foregroundStyle(.primary)
-                    Text("Welcome to your sanctuary.")
+                    Text("Welcome back to your sanctuary.")
                         .font(.j7Caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                
-                HStack(spacing: 4) {
-                    Image(systemName: "timer")
-                        .font(.j7Caption)
-                    Text(appState.formattedTotalHoursRead)
-                        .font(.j7CaptionBold)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.accentColor.opacity(0.12), in: Capsule())
-                .foregroundStyle(Color.accentColor)
             }
             
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(appState.books.count)")
-                        .font(.j7Title2)
-                    Text("Books on shelf")
+            if let recentBook = mostRecentBook {
+                // Horizontal Quick-Resume Card
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    // Tap on the card details: Load document and open the full-screen player
+                    if let doc = appState.libraryService.loadDocument(id: recentBook.id) {
+                        appState.activeSession = ReaderSession(
+                            document: doc,
+                            player: appState.playerService,
+                            scheduler: appState.activeScheduler,
+                            libraryService: appState.libraryService
+                        )
+                        appState.showPlayer = true
+                    }
+                } label: {
+                    HStack(spacing: 14) {
+                        // Left: Cover Art Image
+                        CoverImageView(id: recentBook.id)
+                            .frame(width: 50, height: 70)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 2)
+                        
+                        // Center-Left: Book Title, Author & Playback Progress
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(recentBook.title)
+                                .font(.j7SubheadlineSerifBold)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            
+                            if let author = recentBook.author, !author.isEmpty {
+                                Text(author)
+                                    .font(.j7Caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            
+                            // Sleek Horizontal Progress Bar (2026 Standards)
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.primary.opacity(0.06))
+                                        .frame(height: 4)
+                                    Capsule()
+                                        .fill(Color.accentColor)
+                                        .frame(width: geo.size.width * CGFloat(max(0.0, min(1.0, recentBook.progress))), height: 4)
+                                }
+                            }
+                            .frame(height: 4)
+                            .padding(.vertical, 2)
+                            
+                            // Progress bar / percentage & remaining time
+                            Text("\(Int(round(recentBook.progress * 100)))% read • \(recentBook.estimatedTimeLeft)")
+                                .font(.j7CaptionBold)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        
+                        Spacer()
+                        
+                        // Right: Disclosure indicator
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.primary.opacity(0.25))
+                    }
+                    .padding(14)
+                    .background(Color.j7Surface, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.j7Border, lineWidth: 0.5)
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                // Fine-Print Daily Reading Achievements
+                HStack(spacing: 6) {
+                    Image(systemName: "timer")
+                        .font(.j7Caption)
+                    Text(deviceFirstName.map { "\($0) has read \(appState.formattedTotalHoursRead) total" } ?? "You have read \(appState.formattedTotalHoursRead) total")
+                        .font(.j7CaptionBold)
+                }
+                .foregroundStyle(Color.accentColor)
+                .padding(.top, 2)
+            } else {
+                // Empty state card
+                VStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(Color.accentColor)
+                            .font(.j7SubheadlineSerifBold)
+                        Text("Sanctuary Empty")
+                            .font(.j7SubheadlineSerifBold)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    
+                    Text("Your library is clean and waiting. Import a DRM-free EPUB book, PDF file, or web article below to start your listening sanctuary.")
                         .font(.j7Caption)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
+                .padding(16)
+                .background(Color.j7Surface, in: RoundedRectangle(cornerRadius: 16))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(palette.border, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.j7Border, lineWidth: 0.5)
                 )
+            }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("100% Offline")
-                        .font(.j7Title2)
-                    Text("On-device AI")
-                        .font(.j7Caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(palette.border, lineWidth: 0.5)
-                )
+            if !isModelDownloaded {
+                voiceUpgradeNudge
             }
         }
         .padding(16)
@@ -404,6 +471,66 @@ struct LibraryView: View {
 
 
 
+    private var voiceUpgradeNudge: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            showModelDownload = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "waveform")
+                    .font(.j7SubheadlineBold)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 32, height: 32)
+                    .background(Color.accentColor.opacity(0.1), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Unlock studio-quality narration")
+                        .font(.j7CaptionBold)
+                        .foregroundStyle(.primary)
+                    Text("Tap to download the premium voice (~350 MB)")
+                        .font(.j7Caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.j7SubheadlineBold)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .padding(12)
+            .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 0.5)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var libraryFooter: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            showAboutSheet = true
+        } label: {
+            VStack(spacing: 3) {
+                Text("Built by Joseph Thekkekara")
+                    .font(.j7Caption2Bold)
+                    .foregroundStyle(.secondary.opacity(0.7))
+                Text("LysnBox · 100% on-device")
+                    .font(.j7Caption2)
+                    .foregroundStyle(.secondary.opacity(0.4))
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 24)
+        .padding(.bottom, 120)
+    }
+
     private var filterChipsSection: some View {
         HStack(spacing: 0) {
             filterButton(tab: .all, title: "All")
@@ -412,10 +539,12 @@ struct LibraryView: View {
         }
         .padding(4)
         .background(Color.primary.opacity(0.04), in: Capsule())
-        .overlay(Capsule().stroke(palette.border, lineWidth: 0.5))
+        .overlay(Capsule().stroke(Color.j7Border, lineWidth: 0.5))
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 12)
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
     }
     
     private func filterButton(tab: LibraryTab, title: String) -> some View {
@@ -431,7 +560,7 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity)
                 .background(
                     Capsule()
-                        .fill(selectedTab == tab ? palette.surface : Color.clear)
+                        .fill(selectedTab == tab ? Color.j7Surface : Color.clear)
                         .shadow(
                             color: selectedTab == tab ? Color.black.opacity(0.08) : Color.clear,
                             radius: 3, x: 0, y: 1
@@ -467,11 +596,11 @@ struct LibraryView: View {
                     format: .pastedText
                 )
             }
-            .background(palette.surface)
+            .background(Color.j7Surface)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(palette.border, lineWidth: 1)
+                    .stroke(Color.j7Border, lineWidth: 1)
             )
             .padding(.horizontal, 16)
             .padding(.top, 16)
@@ -519,7 +648,7 @@ struct LibraryView: View {
             if format != .pastedText {
                 Divider()
                     .padding(.leading, 16) // Adjusted to align perfectly with clean typography margins!
-                    .background(palette.border)
+                    .background(Color.j7Border)
             }
         }
     }
@@ -587,7 +716,7 @@ struct LibraryView: View {
 
 
 
-            if case .notDownloaded = appState.supertonicSynthesizer.modelState {
+            if !isModelDownloaded {
                 Button {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     showModelDownload = true
@@ -708,7 +837,7 @@ struct LibraryView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
-        .padding(.bottom, 120)
+        .padding(.bottom, 24)
     }
 
     @ViewBuilder
@@ -736,7 +865,7 @@ struct LibraryView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
-        .padding(.bottom, 120)
+        .padding(.bottom, 24)
     }
 
     @ViewBuilder
@@ -946,14 +1075,13 @@ private struct BookRowCell: View {
 // MARK: - Onboarding Walkthrough Carousel
 
 struct OnboardingCarouselView: View {
-    @Environment(\.palette) private var palette
     @Binding var isPresented: Bool
     @State private var selection = 0
     
     var body: some View {
         ZStack {
             // Immersive clean background
-            palette.appBackground
+            Color.j7AppBackground
                 .ignoresSafeArea()
             
             // Subtle ambient backdrop glow
@@ -1300,6 +1428,7 @@ struct URLImportProgressView: View {
     @State private var progressState: ImportProgress = .fetching
     @State private var errorMessage: String? = nil
     @State private var importTask: Task<Void, Never>? = nil
+    @State private var hasStarted = false
     
     var body: some View {
         VStack(spacing: 24) {
@@ -1378,6 +1507,9 @@ struct URLImportProgressView: View {
     }
     
     private func startImport() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        
         importTask = Task {
             do {
                 var htmlContent: String? = nil

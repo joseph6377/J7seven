@@ -76,7 +76,7 @@ struct ThemePalette {
     }
     
     static let modernBlue = ThemePalette(
-        accent: Color(hex: "#0340c7"),
+        accent: Color(hex: "#3B5284"),
         appBackground: Color(hex: "#F8F9FA"),
         surface: Color(hex: "#FFFFFF"),
         border: Color(hex: "#E6E8EC"),

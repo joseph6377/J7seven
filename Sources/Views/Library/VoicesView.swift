@@ -5,7 +5,6 @@ import Accelerate
 struct VoicesView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.palette) private var palette
     @State private var samplePlayer = VoiceSamplePlayer()
     @State private var showModelDownload = false
     @State private var showEngineInfo = false
@@ -153,7 +152,7 @@ struct VoicesView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 120) // Cushion for floating bottom player deck
             }
-            .background(palette.appBackground.ignoresSafeArea())
+            .background(Color.j7AppBackground.ignoresSafeArea())
             .navigationTitle("Voices")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -230,7 +229,7 @@ struct VoicesView: View {
                                 selectedLanguage == lang ? Color.primary : Color.primary.opacity(0.04)
                             )
                             .foregroundStyle(
-                                selectedLanguage == lang ? palette.surface : .secondary
+                                selectedLanguage == lang ? Color.j7Surface : .secondary
                             )
                             .clipShape(Capsule())
                     }
@@ -262,6 +261,7 @@ struct VoicesView: View {
             activeSession.setVoice(voice)
         }
         UserDefaults.standard.set(voice.id, forKey: "tts.defaultVoiceId")
+        UserDefaults.standard.set(voice.id, forKey: "tts.defaultVoiceId.\(voice.language)")
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
@@ -344,7 +344,6 @@ struct EngineInfoSheet: View {
 // MARK: - Acoustic Card Component
 
 struct AcousticVoiceCard: View {
-    @Environment(\.palette) private var palette
     let voice: TTSVoice
     let isActive: Bool
     let isPlaying: Bool
@@ -394,7 +393,7 @@ struct AcousticVoiceCard: View {
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(palette.surface)
+                    .fill(Color.j7Surface)
             )
             .background(
                 RoundedRectangle(cornerRadius: 14)
@@ -403,7 +402,7 @@ struct AcousticVoiceCard: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(
-                        isActive ? Color.primary.opacity(0.45) : palette.border,
+                        isActive ? Color.primary.opacity(0.45) : Color.j7Border,
                         lineWidth: isActive ? 1.2 : 0.8
                     )
             )

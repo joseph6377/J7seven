@@ -67,7 +67,6 @@ struct WebArticleToParsedBook {
         }
         
         if let urlString = coverUrlString,
-           let relativeURL = URL(string: urlString),
            let absoluteURL = URL(string: urlString, relativeTo: url) {
             let finalURL = absoluteURL.absoluteURL
             print("[WebArticleMapper] Downloading cover image from: \(finalURL.absoluteString)")
@@ -75,11 +74,20 @@ struct WebArticleToParsedBook {
         }
         
         // 4. Split Normalized Text into Paragraphs
-        let paragraphTexts = normalizedText.components(separatedBy: "\n\n")
+        let paragraphTexts = normalizedText.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         
-        let paragraphs = paragraphTexts.map { Paragraph(text: $0, pageNumber: nil) }
+        var paragraphs = paragraphTexts.map { Paragraph(text: $0, pageNumber: nil) }
+        
+        // Prepend the article title as the first paragraph so it is styled as a header in the UI and read first by the TTS engine
+        if !title.isEmpty {
+            let alreadyHasTitle = paragraphs.first?.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(title.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+            if !alreadyHasTitle {
+                paragraphs.insert(Paragraph(text: title, pageNumber: nil), at: 0)
+            }
+        }
         
         let oneChapter = WebChapter(
             title: title,

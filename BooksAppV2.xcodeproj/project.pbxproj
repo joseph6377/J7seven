@@ -16,7 +16,6 @@
 		1D27906CE56FB152E98B2DEE /* XMLIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99135E353E149B7CFEFE1355 /* XMLIndexer.swift */; };
 		22CBCB4148E9FC67F0049519 /* ReaderSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01957373D942D8C9D515C3D3 /* ReaderSession.swift */; };
 		26639656FF51C20B13BE215F /* PastedTextImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C1FA1A2D3A0D85A29529B64 /* PastedTextImporter.swift */; };
-		2D65C59C21A9884D8693FF64 /* ImportDrawerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E253089A6309D6DB27824CDF /* ImportDrawerSheet.swift */; };
 		3075795EEC9751BD78F2A039 /* LibraryPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00B41DF92508BAE018105C5 /* LibraryPaths.swift */; };
 		330DD9843F3F4283881ABE74 /* SupertonicSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A618B5CFD8A7E12C6C0C8E /* SupertonicSynthesizer.swift */; };
 		3DD2B891BDF9AD61CBA265BD /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1C7CA8E932CD5688E3177F /* AppState.swift */; };
@@ -142,7 +141,7 @@
 		7B1C7CA8E932CD5688E3177F /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		7EA9AA7468F79066C83060A7 /* WebArticleImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebArticleImporter.swift; sourceTree = "<group>"; };
 		7F830A1A4A73E8F5BC2139B3 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
-		83B5BECA1EAA99295D33780A /* J7ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = J7ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		83B5BECA1EAA99295D33780A /* J7ShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = J7ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		89A618B5CFD8A7E12C6C0C8E /* SupertonicSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupertonicSynthesizer.swift; sourceTree = "<group>"; };
 		8A5987A3382761967C2AA659 /* WelcomeModelDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeModelDownloadView.swift; sourceTree = "<group>"; };
 		8DD4AAB8D5FF3CFE1D595AF8 /* XMLIndexerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMLIndexerTests.swift; sourceTree = "<group>"; };
@@ -155,22 +154,21 @@
 		ABC9E9FC117622A81C545021 /* AudioPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerView.swift; sourceTree = "<group>"; };
 		AC8120B996CD9C1ACDFA155E /* WebArticleImporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebArticleImporterTests.swift; sourceTree = "<group>"; };
 		B00B41DF92508BAE018105C5 /* LibraryPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPaths.swift; sourceTree = "<group>"; };
-		B5D37AE5873037F2CB5B18A7 /* BooksAppV2Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BooksAppV2Tests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B5D37AE5873037F2CB5B18A7 /* BooksAppV2Tests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BooksAppV2Tests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B9BA06DF231912F1134B88A7 /* PdfTextParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PdfTextParser.swift; sourceTree = "<group>"; };
 		BDD32908E045FD87B70E1C50 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C6D227184208A1D7133D347A /* TTSEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSEngine.swift; sourceTree = "<group>"; };
 		CD0BF5EB61BA8CB684C18289 /* PlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerService.swift; sourceTree = "<group>"; };
-		D3733D82D9C509FB55AB2661 /* BooksAppV2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BooksAppV2.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D3733D82D9C509FB55AB2661 /* BooksAppV2.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BooksAppV2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB7634AD4B842D8591081DD7 /* EpubTextParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubTextParserTests.swift; sourceTree = "<group>"; };
 		DEAB5E54AEBAEE7318FBBE4F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		E253089A6309D6DB27824CDF /* ImportDrawerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportDrawerSheet.swift; sourceTree = "<group>"; };
 		E97757B67B974D69D2BF9345 /* TTSVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSVoice.swift; sourceTree = "<group>"; };
 		E9C70791099EC45E3ECB4613 /* BooksAppShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BooksAppShareExtension.entitlements; sourceTree = "<group>"; };
 		EBD3451DCCA48F6BA1D91E6F /* SharePreprocessor.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = SharePreprocessor.js; sourceTree = "<group>"; };
 		F0A9506AF61422634A69EED7 /* SentenceChunker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceChunker.swift; sourceTree = "<group>"; };
 		F29D803D62D6793EA6485EB6 /* BooksAppV2UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BooksAppV2UITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F4E3E1998CD824CBF0E654F8 /* HtmlFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HtmlFetcher.swift; sourceTree = "<group>"; };
-		FB863B351F2A8ECAF1832B0E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		FB863B351F2A8ECAF1832B0E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FE01AAD2C39105AE0380A5A8 /* Font+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Font+Theme.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -361,7 +359,6 @@
 			children = (
 				69845A77C438A4CCCB8ACF13 /* AppLogoView.swift */,
 				397BA06A4474225DFBBC8E46 /* CoverImageView.swift */,
-				E253089A6309D6DB27824CDF /* ImportDrawerSheet.swift */,
 				418F5B84A4C29A4DE7A0535E /* MiniPlayerView.swift */,
 			);
 			path = Components;
@@ -588,7 +585,6 @@
 				1D123A85EBC4AAFA6975DEFF /* EpubTextParser.swift in Sources */,
 				44F890ECA7FFA86D7A7D6377 /* Font+Theme.swift in Sources */,
 				864342A0151364D5988FDE51 /* HtmlFetcher.swift in Sources */,
-				2D65C59C21A9884D8693FF64 /* ImportDrawerSheet.swift in Sources */,
 				D1BB96A122B0A759FC83F0E3 /* ImportView.swift in Sources */,
 				66C5CC1C8E75D05664417A34 /* JsonLdExtractor.swift in Sources */,
 				9250F25F3E3E8DB1F25FB076 /* JunkPatternStripper.swift in Sources */,
@@ -756,7 +752,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -863,7 +858,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
-				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = BooksAppV2/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -887,7 +881,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
-				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = BooksAppV2/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -908,7 +901,6 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/Services/Web/ShareExtension/J7ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
-				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = Sources/Services/Web/ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -928,7 +920,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -949,7 +940,6 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/Services/Web/ShareExtension/J7ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
-				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = Sources/Services/Web/ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

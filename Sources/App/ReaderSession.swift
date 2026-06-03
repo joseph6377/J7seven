@@ -102,15 +102,50 @@ final class ReaderSession: ObservableObject {
             synthSched.steps = self.steps
         }
 
-        // Load default voice if set in UserDefaults, otherwise fallback
-        let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId")
+        // Load default voice matching the document language
+        let docLang = document.detectedLanguage
+        let savedVoiceId = UserDefaults.standard.string(forKey: "tts.defaultVoiceId.\(docLang)")
+            ?? UserDefaults.standard.string(forKey: "tts.defaultVoiceId")
+            
+        let initialVoiceId: String
+        let engine = UserDefaults.standard.string(forKey: "tts.engine").flatMap(TTSEngine.init(rawValue:)) ?? .supertonic
+        
+        if engine == .apple {
+            if let voiceId = savedVoiceId, voiceId.hasPrefix("apple-") {
+                let lowId = voiceId.lowercased()
+                if lowId.contains("-\(docLang.lowercased())-") || lowId.contains("-\(docLang.lowercased())") {
+                    initialVoiceId = voiceId
+                } else {
+                    initialVoiceId = "apple-\(docLang)"
+                }
+            } else {
+                initialVoiceId = "apple-\(docLang)"
+            }
+        } else {
+            // For Supertonic: preserve the selected base voice style (e.g. "M3") and map it to the document's language
+            let baseVoiceId: String
+            if let voiceId = savedVoiceId, !voiceId.hasPrefix("apple-") {
+                baseVoiceId = voiceId.components(separatedBy: "-").first ?? "M1"
+            } else {
+                baseVoiceId = "M1"
+            }
+            initialVoiceId = "\(baseVoiceId)-\(docLang)"
+        }
+        
         let initialVoice = TTSVoice(
-            id: savedVoiceId ?? "M1",
+            id: initialVoiceId,
             name: "Default",
-            language: "en",
+            language: docLang,
             gender: .male
         )
         self.voice = sanitizeVoice(initialVoice, for: scheduler)
+
+        // Load default playback rate and synchronize with player and scheduler
+        let savedRate = UserDefaults.standard.float(forKey: "playback.rate")
+        let rate = savedRate == 0.0 ? 1.0 : savedRate
+        self.playbackRate = rate
+        player.setRate(rate)
+        scheduler.setRate(rate)
     }
 
     private func setupCallbacks(on sched: any PlaybackScheduler) {
@@ -223,7 +258,7 @@ final class ReaderSession: ObservableObject {
         let chapters = document.chapters
         guard !chapters.isEmpty else { return }
         
-        // 1. Calculate current absolute character position
+        // 1. Calculate current absolute character position, including sub-paragraph progress
         var currentAbsoluteCharIndex = 0
         var foundCurrent = false
         
@@ -237,6 +272,10 @@ final class ReaderSession: ObservableObject {
                 currentAbsoluteCharIndex += ch.paragraphs[pIdx].text.count
             }
             if foundCurrent { break }
+        }
+        
+        if let activeRange = activeWordRange, activeRange.location != NSNotFound {
+            currentAbsoluteCharIndex += activeRange.location
         }
         
         // 2. Add seeking chars
@@ -269,7 +308,34 @@ final class ReaderSession: ObservableObject {
             targetParagraphIndex = max(0, chapters[targetChapterIndex].paragraphs.count - 1)
         }
         
-        // 4. Update cursor and advance scheduler
+        // 4. If target is the same as current paragraph, force transition to next/previous paragraph
+        if targetChapterIndex == currentChapterIndex && targetParagraphIndex == currentParagraphIndex {
+            if seconds > 0 {
+                // Skip forward: force advance to next paragraph
+                targetParagraphIndex += 1
+                if targetParagraphIndex >= chapters[targetChapterIndex].paragraphs.count {
+                    if targetChapterIndex + 1 < chapters.count {
+                        targetChapterIndex += 1
+                        targetParagraphIndex = 0
+                    } else {
+                        targetParagraphIndex = chapters[targetChapterIndex].paragraphs.count - 1
+                    }
+                }
+            } else if seconds < 0 {
+                // Skip backward: force go to previous paragraph
+                targetParagraphIndex -= 1
+                if targetParagraphIndex < 0 {
+                    if targetChapterIndex > 0 {
+                        targetChapterIndex -= 1
+                        targetParagraphIndex = chapters[targetChapterIndex].paragraphs.count - 1
+                    } else {
+                        targetParagraphIndex = 0
+                    }
+                }
+            }
+        }
+        
+        // 5. Update cursor and advance scheduler
         let newCursor = PlaybackCursor(chapterIndex: targetChapterIndex, paragraphIndex: targetParagraphIndex)
         document.cursor = newCursor
         if state == .playing { isBuffering = true }
@@ -312,12 +378,14 @@ final class ReaderSession: ObservableObject {
 
     func setRate(_ rate: Float) {
         playbackRate = rate
+        UserDefaults.standard.set(rate, forKey: "playback.rate")
         player.setRate(rate)   // AVAudioUnitTimePitch for Supertonic
         scheduler.setRate(rate) // utterance.rate for Apple voice
     }
 
     func setVoice(_ voice: TTSVoice) {
         self.voice = sanitizeVoice(voice, for: scheduler)
+        UserDefaults.standard.set(voice.id, forKey: "tts.defaultVoiceId.\(voice.language)")
         if state == .playing {
             scheduler.advanceTo(cursor: document.cursor, voice: self.voice)
         }
@@ -342,6 +410,7 @@ final class ReaderSession: ObservableObject {
 
         scheduler = newScheduler
         setupCallbacks(on: newScheduler)
+        newScheduler.setRate(playbackRate)
 
         self.voice = sanitizeVoice(self.voice, for: newScheduler)
         playbackError = nil

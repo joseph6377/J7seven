@@ -22,7 +22,7 @@ struct ReadabilityExtractor {
         }
         
         return ReadabilityResult(
-            html: parsed.content ?? "",
+            html: parsed.content,
             title: parsed.title ?? "",
             byline: parsed.byline,
             excerpt: parsed.excerpt
