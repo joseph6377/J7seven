@@ -54,8 +54,8 @@ targets:
         CFBundleDisplayName: "LysnBox"
         CFBundleName: BooksAppV2
         CFBundleIdentifier: in.josepht.booksappv2
-        CFBundleVersion: "8"
-        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         UILaunchScreen:
           UIColorName: ""
         UISupportedInterfaceOrientations:
