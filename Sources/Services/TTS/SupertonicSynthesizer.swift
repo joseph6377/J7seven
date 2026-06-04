@@ -31,9 +31,20 @@ protocol Synthesizer {
 
 @Observable
 @MainActor
-final class SupertonicSynthesizer: Synthesizer {
+final class SupertonicSynthesizer: NSObject, Synthesizer {
 
-    private var modelDirectory: URL {
+    private var backgroundSession: URLSession!
+    private var taskProgressBytes: [String: Int64] = [:]
+
+    override init() {
+        super.init()
+        let config = URLSessionConfiguration.background(withIdentifier: "in.josepht.booksappv2.modeldownload")
+        config.isDiscretionary = false
+        config.sessionSendsLaunchEvents = true
+        self.backgroundSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }
+
+    private nonisolated var modelDirectory: URL {
         FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Models/supertonic", isDirectory: true)
@@ -169,11 +180,21 @@ final class SupertonicSynthesizer: Synthesizer {
                 await self.loadModel()
             }
         } else {
-            modelState = .notDownloaded
+            backgroundSession.getAllTasks { [weak self] tasks in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    if !tasks.isEmpty {
+                        print("[SupertonicSynthesizer] Active background tasks found on app launch/resume. Reconnecting...")
+                        self.updateProgress()
+                    } else {
+                        self.modelState = .notDownloaded
+                    }
+                }
+            }
         }
     }
 
-    func downloadModel() async throws {
+    private func startBackgroundTasks() throws {
         let fm = FileManager.default
         try fm.createDirectory(
             at: modelDirectory.appendingPathComponent("onnx"),
@@ -182,35 +203,64 @@ final class SupertonicSynthesizer: Synthesizer {
             at: modelDirectory.appendingPathComponent("voice_styles"),
             withIntermediateDirectories: true)
 
-        var downloadedBytes = 0
-        modelState = .downloading(progress: 0)
-
+        var filesToDownload: [String] = []
         for file in Self.modelFiles {
             let dest = modelDirectory.appendingPathComponent(file.path)
-
-            if fm.fileExists(atPath: dest.path) {
-                downloadedBytes += file.size
-                modelState = .downloading(
-                    progress: Double(downloadedBytes) / Double(Self.totalBytes))
-                continue
+            if !fm.fileExists(atPath: dest.path) {
+                filesToDownload.append(file.path)
             }
-
-            guard let url = URL(string: "\(Self.hfBase)/\(file.path)") else { continue }
-            let (tmpURL, response) = try await URLSession.shared.download(from: url)
-            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-                try? fm.removeItem(at: tmpURL)
-                throw URLError(.badServerResponse)
-            }
-            try? fm.removeItem(at: dest)
-            try fm.moveItem(at: tmpURL, to: dest)
-
-            downloadedBytes += file.size
-            modelState = .downloading(
-                progress: Double(downloadedBytes) / Double(Self.totalBytes))
         }
 
-        modelState = .loading
-        await loadModel()
+        if filesToDownload.isEmpty {
+            modelState = .loading
+            Task {
+                await self.loadModel()
+            }
+            return
+        }
+
+        if case .downloading = modelState {
+            return
+        }
+
+        updateProgress()
+
+        for filePath in filesToDownload {
+            guard let url = URL(string: "\(Self.hfBase)/\(filePath)") else { continue }
+            let task = backgroundSession.downloadTask(with: url)
+            task.taskDescription = filePath
+            task.resume()
+            print("[SupertonicSynthesizer] Enqueued background task for: \(filePath)")
+        }
+    }
+
+    func downloadModel() async throws {
+        do {
+            try startBackgroundTasks()
+
+            while true {
+                try Task.checkCancellation()
+
+                switch modelState {
+                case .ready:
+                    return
+                case .error(let msg):
+                    throw NSError(domain: "SupertonicSynthesizer", code: 2, userInfo: [NSLocalizedDescriptionKey: msg])
+                case .notDownloaded:
+                    throw CancellationError()
+                default:
+                    try await Task.sleep(nanoseconds: 200_000_000) // 200ms
+                }
+            }
+        } catch is CancellationError {
+            cancelDownload()
+            modelState = .notDownloaded
+            throw CancellationError()
+        } catch {
+            cancelDownload()
+            modelState = .error(error.localizedDescription)
+            throw error
+        }
     }
 
     private func loadModel() async {
@@ -338,5 +388,122 @@ final class SupertonicSynthesizer: Synthesizer {
 
     func cancelAll() {
         // Task handles cancellation automatically via AsyncThrowingStream's onTermination
+    }
+}
+
+extension SupertonicSynthesizer: URLSessionDownloadDelegate {
+
+    private func updateProgress() {
+        var completedBytes = 0
+        let fm = FileManager.default
+
+        for file in Self.modelFiles {
+            let dest = modelDirectory.appendingPathComponent(file.path)
+            if fm.fileExists(atPath: dest.path) {
+                completedBytes += file.size
+            } else if let progress = taskProgressBytes[file.path] {
+                completedBytes += Int(progress)
+            }
+        }
+
+        let progress = Double(completedBytes) / Double(Self.totalBytes)
+        modelState = .downloading(progress: min(0.99, max(0.0, progress)))
+    }
+
+    private func checkIfAllDownloadsFinished() {
+        let allFilesExist = Self.modelFiles.allSatisfy { file in
+            let path = modelDirectory.appendingPathComponent(file.path).path
+            return FileManager.default.fileExists(atPath: path)
+        }
+
+        if allFilesExist {
+            modelState = .loading
+            Task {
+                await self.loadModel()
+                AppDelegate.backgroundSessionCompletionHandler?()
+                AppDelegate.backgroundSessionCompletionHandler = nil
+            }
+        } else {
+            updateProgress()
+        }
+    }
+
+    private func checkIfAllTasksCancelled() {
+        backgroundSession.getAllTasks { tasks in
+            Task { @MainActor in
+                if tasks.isEmpty {
+                    self.modelState = .notDownloaded
+                    self.taskProgressBytes.removeAll()
+                }
+            }
+        }
+    }
+
+    func cancelDownload() {
+        backgroundSession.getAllTasks { tasks in
+            for task in tasks {
+                task.cancel()
+            }
+        }
+    }
+
+    // MARK: - URLSessionDownloadDelegate
+
+    nonisolated func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {
+        guard let filePath = downloadTask.taskDescription else { return }
+        let dest = modelDirectory.appendingPathComponent(filePath)
+        let fm = FileManager.default
+
+        do {
+            try? fm.removeItem(at: dest)
+            try fm.moveItem(at: location, to: dest)
+            print("[SupertonicSynthesizer] Successfully moved background download: \(filePath)")
+        } catch {
+            print("[SupertonicSynthesizer] Failed to move background download \(filePath): \(error)")
+        }
+    }
+
+    nonisolated func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        guard let filePath = downloadTask.taskDescription else { return }
+
+        Task { @MainActor in
+            self.taskProgressBytes[filePath] = totalBytesWritten
+            self.updateProgress()
+        }
+    }
+
+    nonisolated func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        guard let filePath = task.taskDescription else { return }
+
+        Task { @MainActor in
+            if let error = error {
+                let nsError = error as NSError
+                if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+                    print("[SupertonicSynthesizer] Background task cancelled for: \(filePath)")
+                    self.checkIfAllTasksCancelled()
+                } else {
+                    print("[SupertonicSynthesizer] Background task failed for: \(filePath) with error: \(error.localizedDescription)")
+                    self.modelState = .error(error.localizedDescription)
+                }
+            } else {
+                print("[SupertonicSynthesizer] Background task completed for: \(filePath)")
+                self.taskProgressBytes.removeValue(forKey: filePath)
+                self.checkIfAllDownloadsFinished()
+            }
+        }
     }
 }

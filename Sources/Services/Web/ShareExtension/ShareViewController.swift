@@ -134,7 +134,7 @@ final class ShareViewController: UIViewController {
         var responder: UIResponder? = self
         while let r = responder {
             if let app = r as? UIApplication {
-                app.perform(#selector(UIApplication.open(_:options:completionHandler:)), with: url, with: nil)
+                app.open(url, options: [:], completionHandler: nil)
                 return
             }
             responder = r.next

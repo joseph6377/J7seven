@@ -7,6 +7,7 @@ struct WelcomeModelDownloadView: View {
     var onUseApple: () -> Void = {}
 
     @State private var hasTappedDownload = false
+    @State private var downloadTask: Task<Void, Never>? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -61,6 +62,9 @@ struct WelcomeModelDownloadView: View {
                     dismiss()
                 }
             }
+        }
+        .onDisappear {
+            downloadTask?.cancel()
         }
     }
 
@@ -183,8 +187,9 @@ struct WelcomeModelDownloadView: View {
                 Button {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     hasTappedDownload = true
-                    Task {
+                    downloadTask = Task {
                         try? await synthesizer.downloadModel()
+                        downloadTask = nil
                     }
                 } label: {
                     HStack {
@@ -224,6 +229,19 @@ struct WelcomeModelDownloadView: View {
                         .font(.j7CaptionBold)
                         .foregroundStyle(Color.accentColor)
                 }
+                
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    downloadTask?.cancel()
+                    downloadTask = nil
+                    hasTappedDownload = false
+                } label: {
+                    Text("Cancel Download")
+                        .font(.j7CaptionBold)
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
             }
             .padding(.vertical, 4)
             
@@ -267,8 +285,9 @@ struct WelcomeModelDownloadView: View {
                 
                 Button {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    Task {
+                    downloadTask = Task {
                         try? await synthesizer.downloadModel()
+                        downloadTask = nil
                     }
                 } label: {
                     Text("Retry Download")

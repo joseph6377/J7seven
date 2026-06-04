@@ -91,4 +91,36 @@ final class BooksAppV2UITests: XCTestCase {
         // (x must be >= 0, y must be >= 0, x+width <= windowWidth, y+height <= windowHeight)
         XCTAssertTrue(windowFrame.contains(paraFrame), "Paragraph frame \(paraFrame) is not fully contained within the visible simulator window bounds \(windowFrame).")
     }
+    
+    func testSafariShare() throws {
+        // 1. Open URL in Safari on the booted simulator using xcrun simctl from the test runner context,
+        // or let's assume it was opened beforehand (or we open it by launching Safari).
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        safari.launch()
+        
+        // Wait for Safari to load
+        XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 15))
+        
+        // 2. Find and tap the Safari More Menu button to open Safari menu.
+        let moreButton = safari.buttons["MoreMenuButton"]
+        XCTAssertTrue(moreButton.waitForExistence(timeout: 10), "Safari More Menu button should exist.")
+        moreButton.tap()
+        
+        // 3. Find and tap the native "Share" button using its unique identifier.
+        let shareButton = safari.buttons["ShareButton"]
+        XCTAssertTrue(shareButton.waitForExistence(timeout: 10), "Safari Share button should exist.")
+        shareButton.tap()
+        
+        // 4. Locate the LysnBox cell in the share sheet.
+        let lysnboxCell = safari.cells["LysnBox"]
+        XCTAssertTrue(lysnboxCell.waitForExistence(timeout: 15), "LysnBox option should appear in Safari Share Sheet.")
+        lysnboxCell.tap()
+        
+        // 5. Verify that LysnBox is opened
+        let lysnboxApp = XCUIApplication(bundleIdentifier: "in.josepht.booksappv2")
+        XCTAssertTrue(lysnboxApp.wait(for: .runningForeground, timeout: 15), "LysnBox app should launch and come to the foreground.")
+        
+        // Let it run for a few seconds to process the import
+        Thread.sleep(forTimeInterval: 5)
+    }
 }

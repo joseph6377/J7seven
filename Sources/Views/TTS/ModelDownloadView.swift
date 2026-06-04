@@ -6,6 +6,8 @@ struct ModelDownloadView: View {
     var onReady: () -> Void = {}
     var onQuickStart: (() -> Void)? = nil
 
+    @State private var downloadTask: Task<Void, Never>? = nil
+
     var body: some View {
         VStack(spacing: 28) {
             Image(systemName: "arrow.down.circle")
@@ -25,6 +27,8 @@ struct ModelDownloadView: View {
 
             if let onQuickStart {
                 Button("Quick Start with Apple Voice") {
+                    downloadTask?.cancel()
+                    downloadTask = nil
                     onQuickStart()
                     dismiss()
                 }
@@ -32,12 +36,30 @@ struct ModelDownloadView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Button("Cancel") { dismiss() }
-                .font(.j7Subheadline)
-                .foregroundStyle(.secondary)
+            Button("Cancel") {
+                downloadTask?.cancel()
+                downloadTask = nil
+                dismiss()
+            }
+            .font(.j7Subheadline)
+            .foregroundStyle(.secondary)
         }
         .padding(36)
-        .task { try? await synthesizer.downloadModel() }
+        .onAppear {
+            startDownload()
+        }
+        .onDisappear {
+            downloadTask?.cancel()
+            downloadTask = nil
+        }
+    }
+
+    private func startDownload() {
+        downloadTask?.cancel()
+        downloadTask = Task {
+            try? await synthesizer.downloadModel()
+            downloadTask = nil
+        }
     }
 
     @ViewBuilder
@@ -66,8 +88,10 @@ struct ModelDownloadView: View {
                 Label("Download failed", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
                 Text(msg).font(.j7Caption).foregroundStyle(.secondary)
-                Button("Retry") { Task { try? await synthesizer.downloadModel() } }
-                    .buttonStyle(.borderedProminent)
+                Button("Retry") {
+                    startDownload()
+                }
+                .buttonStyle(.borderedProminent)
             }
         default:
             ProgressView()
