@@ -15,12 +15,10 @@ struct LibraryView: View {
     @State private var searchText = ""
     @State private var isSearchActive = false
     @FocusState private var isSearchFieldFocused: Bool
-    @State private var showModelDownload = false
     @AppStorage("library.isGridView") private var isGridView = false
     @State private var favorites: Set<UUID> = Set()
     
     @State private var pendingImportURL: URL?
-    @State private var pendingEntry: LibraryEntry? = nil
     @State private var showAboutSheet = false
     @State private var showWelcomeDownload = false
     @State private var showOnboardingCarousel = false
@@ -179,28 +177,6 @@ struct LibraryView: View {
             ToolbarItem(placement: .primaryAction) {
                 toolbarActions
             }
-        }
-        .sheet(isPresented: $showModelDownload, onDismiss: {
-            pendingEntry = nil
-        }) {
-            ModelDownloadView(
-                synthesizer: appState.supertonicSynthesizer,
-                onReady: {
-                    appState.selectedEngine = .supertonic
-                    if let entry = pendingEntry {
-                        appState.openDocument(entry)
-                        pendingEntry = nil
-                    }
-                },
-                onQuickStart: {
-                    appState.selectedEngine = .apple
-                    if let entry = pendingEntry {
-                        appState.openDocument(entry)
-                        pendingEntry = nil
-                    }
-                }
-            )
-            .preferredColorScheme(.light)
         }
         .sheet(isPresented: $showAboutSheet) {
             AboutView()
@@ -472,42 +448,123 @@ struct LibraryView: View {
 
 
     private var voiceUpgradeNudge: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            showModelDownload = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "waveform")
-                    .font(.j7SubheadlineBold)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 32, height: 32)
-                    .background(Color.accentColor.opacity(0.1), in: Circle())
+        let state = appState.supertonicSynthesizer.modelState
+        
+        let title: String
+        let subtitle: String
+        let accentColor: Color
+        let bgColor: Color
+        let borderColor: Color
+        
+        switch state {
+        case .downloading:
+            title = "Downloading Premium Voice"
+            subtitle = ""
+            accentColor = Color.accentColor
+            bgColor = Color.accentColor.opacity(0.08)
+            borderColor = Color.accentColor.opacity(0.2)
+        case .loading:
+            title = "Preparing Voice Studio..."
+            subtitle = "LysnBox is setting up the voice engine"
+            accentColor = Color.accentColor
+            bgColor = Color.accentColor.opacity(0.08)
+            borderColor = Color.accentColor.opacity(0.2)
+        case .error(let errorMsg):
+            title = "Premium Voice Download Failed"
+            subtitle = "Tap to retry download (\(errorMsg))"
+            accentColor = Color.red
+            bgColor = Color.red.opacity(0.05)
+            borderColor = Color.red.opacity(0.15)
+        default:
+            title = "Unlock studio-quality narration"
+            subtitle = "Tap to download the premium voice (~350 MB)"
+            accentColor = Color.accentColor
+            bgColor = Color.accentColor.opacity(0.06)
+            borderColor = Color.accentColor.opacity(0.15)
+        }
+        
+        let isDownloadingOrLoading: Bool
+        switch state {
+        case .downloading, .loading:
+            isDownloadingOrLoading = true
+        default:
+            isDownloadingOrLoading = false
+        }
+        
+        return HStack(spacing: 12) {
+            Image(systemName: "waveform")
+                .font(.j7SubheadlineBold)
+                .foregroundStyle(accentColor)
+                .frame(width: 32, height: 32)
+                .background(accentColor.opacity(0.1), in: Circle())
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Unlock studio-quality narration")
-                        .font(.j7CaptionBold)
-                        .foregroundStyle(.primary)
-                    Text("Tap to download the premium voice (~350 MB)")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.j7CaptionBold)
+                    .foregroundStyle(.primary)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
                         .font(.j7Caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-
-                Spacer(minLength: 4)
-
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.j7SubheadlineBold)
-                    .foregroundStyle(Color.accentColor)
             }
-            .padding(12)
-            .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.accentColor.opacity(0.15), lineWidth: 0.5)
-            )
-            .contentShape(Rectangle())
+
+            Spacer(minLength: 4)
+
+            // Right side dynamic accessory
+            if isDownloadingOrLoading {
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    appState.supertonicSynthesizer.cancelDownload()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.j7SubheadlineBold)
+                        .foregroundStyle(accentColor.opacity(0.6))
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+            } else {
+                switch state {
+                case .error:
+                    Image(systemName: "arrow.clockwise")
+                        .font(.j7SubheadlineBold)
+                        .foregroundStyle(accentColor)
+                default:
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.j7SubheadlineBold)
+                        .foregroundStyle(accentColor)
+                }
+            }
         }
-        .buttonStyle(.plain)
+        .padding(12)
+        .background(bgColor)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(borderColor, lineWidth: 0.5)
+        )
+        .overlay(
+            GeometryReader { geo in
+                if case .downloading(let progress) = state {
+                    ZStack(alignment: .leading) {
+                        Color.clear
+                        Rectangle()
+                            .fill(accentColor)
+                            .frame(width: geo.size.width * CGFloat(progress), height: 3)
+                    }
+                    .frame(height: 3)
+                    .offset(y: geo.size.height - 3)
+                }
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isDownloadingOrLoading {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                appState.supertonicSynthesizer.startDownload()
+            }
+        }
     }
 
     private var libraryFooter: some View {
@@ -711,23 +768,6 @@ struct LibraryView: View {
                     .frame(width: 32, height: 32)
             }
             .buttonStyle(.plain)
-
-
-
-
-
-            if !isModelDownloaded {
-                Button {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    showModelDownload = true
-                } label: {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.j7SubheadlineBold)
-                        .foregroundStyle(Color.primary)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.plain)
-            }
         }
     }
 
@@ -886,11 +926,9 @@ struct LibraryView: View {
     private func openOrDownload(_ entry: LibraryEntry) {
         if appState.selectedEngine == .supertonic,
            case .notDownloaded = appState.supertonicSynthesizer.modelState {
-            pendingEntry = entry
-            showModelDownload = true
-        } else {
-            appState.openDocument(entry)
+            appState.supertonicSynthesizer.startDownload()
         }
+        appState.openDocument(entry)
     }
 
     private func loadFavorites() {
@@ -1592,4 +1630,6 @@ struct IdentifiableURL: Identifiable {
     let id = UUID()
     let url: URL
 }
+
+
 

@@ -21,10 +21,6 @@ struct ContentView: View {
     @State private var urlString = ""
     @State private var activeURLToImport: URL? = nil
     
-    // Model Download / Error States
-    @State private var showModelDownload = false
-    @State private var pendingImportURL: URL? = nil
-    @State private var pendingEntry: LibraryEntry? = nil
     @State private var showImportError = false
     @State private var importErrorMessage = ""
     
@@ -175,34 +171,6 @@ struct ContentView: View {
                     }
                 }
             }
-        }
-        .sheet(isPresented: $showModelDownload, onDismiss: {
-            pendingEntry = nil
-        }) {
-            ModelDownloadView(
-                synthesizer: appState.supertonicSynthesizer,
-                onReady: {
-                    appState.selectedEngine = .supertonic
-                    if let url = pendingImportURL {
-                        Task { await importBook(url: url); pendingImportURL = nil }
-                    }
-                    if let entry = pendingEntry {
-                        appState.openDocument(entry)
-                        pendingEntry = nil
-                    }
-                },
-                onQuickStart: {
-                    appState.selectedEngine = .apple
-                    if let url = pendingImportURL {
-                        Task { await importBook(url: url); pendingImportURL = nil }
-                    }
-                    if let entry = pendingEntry {
-                        appState.openDocument(entry)
-                        pendingEntry = nil
-                    }
-                }
-            )
-            .preferredColorScheme(.light)
         }
         .alert("Import Failed", isPresented: $showImportError) {
             Button("OK", role: .cancel) {}
@@ -392,9 +360,7 @@ struct ContentView: View {
     private func importBook(url: URL) async {
         if appState.selectedEngine == .supertonic,
            case .notDownloaded = appState.supertonicSynthesizer.modelState {
-            pendingImportURL = url
-            showModelDownload = true
-            return
+            appState.supertonicSynthesizer.startDownload()
         }
         
         do {

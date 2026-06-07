@@ -22,7 +22,6 @@ struct AudioPlayerView: View {
     @State private var autoHideWorkItem: DispatchWorkItem? = nil
 
     // Playback Error and Repair states
-    @State private var showRepairSheet = false
     @State private var showErrorAlert = false
     @State private var activeError: (any Error)? = nil
 
@@ -318,7 +317,10 @@ struct AudioPlayerView: View {
                 if hasError, let error = session.playbackError {
                     let desc = error.localizedDescription
                     if desc.contains("Model not loaded") || desc.contains("Model file missing") {
-                        showRepairSheet = true
+                        appState.supertonicSynthesizer.startDownload()
+                        appState.selectedEngine = .apple
+                        session.switchToScheduler(appState.appleVoiceScheduler, voices: appState.appleVoiceScheduler.cachedVoices)
+                        session.playbackError = nil
                     } else {
                         activeError = error
                         showErrorAlert = true
@@ -353,15 +355,6 @@ struct AudioPlayerView: View {
                 MoreOptionsSheet(session: session)
                     .environment(appState)
                     .preferredColorScheme(.light)
-            }
-            .sheet(isPresented: $showRepairSheet, onDismiss: {
-                session.playbackError = nil
-            }) {
-                ModelDownloadView(synthesizer: appState.supertonicSynthesizer) {
-                    appState.selectedEngine = .supertonic
-                    session.switchToScheduler(appState.synthScheduler, voices: TTSVoice.loadAll())
-                }
-                .preferredColorScheme(.light)
             }
             .alert("Playback Error", isPresented: $showErrorAlert, presenting: activeError) { _ in
                 Button("OK", role: .cancel) {
@@ -1094,8 +1087,6 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var showUpgrade = false
-
     private var supertonicReady: Bool {
         if case .ready = appState.supertonicSynthesizer.modelState { return true }
         return false
@@ -1131,7 +1122,9 @@ struct SettingsSheet: View {
                 if !supertonicReady {
                     Section {
                         Button {
-                            showUpgrade = true
+                            appState.supertonicSynthesizer.startDownload()
+                            appState.selectedEngine = .supertonic
+                            session.switchToScheduler(appState.synthScheduler, voices: TTSVoice.loadAll())
                         } label: {
                             Label("Download Supertonic for best quality", systemImage: "arrow.down.circle")
                         }
@@ -1259,13 +1252,6 @@ struct SettingsSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
-            }
-            .sheet(isPresented: $showUpgrade) {
-                ModelDownloadView(synthesizer: appState.supertonicSynthesizer) {
-                    appState.selectedEngine = .supertonic
-                    session.switchToScheduler(appState.synthScheduler, voices: TTSVoice.loadAll())
-                }
-                .preferredColorScheme(.light)
             }
         }
     }

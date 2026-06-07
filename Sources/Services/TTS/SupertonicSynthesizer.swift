@@ -186,6 +186,7 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
                     if !tasks.isEmpty {
                         print("[SupertonicSynthesizer] Active background tasks found on app launch/resume. Reconnecting...")
                         self.updateProgress()
+                        self.startDownload()
                     } else {
                         self.modelState = .notDownloaded
                     }
@@ -234,32 +235,33 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
         }
     }
 
-    func downloadModel() async throws {
-        do {
-            try startBackgroundTasks()
+    private var activeDownloadTask: Task<Void, Never>? = nil
 
-            while true {
-                try Task.checkCancellation()
-
-                switch modelState {
-                case .ready:
-                    return
-                case .error(let msg):
-                    throw NSError(domain: "SupertonicSynthesizer", code: 2, userInfo: [NSLocalizedDescriptionKey: msg])
-                case .notDownloaded:
-                    throw CancellationError()
-                default:
-                    try await Task.sleep(nanoseconds: 200_000_000) // 200ms
+    func startDownload() {
+        guard activeDownloadTask == nil else { return }
+        
+        if case .ready = modelState { return }
+        if case .loading = modelState { return }
+        
+        activeDownloadTask = Task {
+            do {
+                try startBackgroundTasks()
+                
+                while true {
+                    try Task.checkCancellation()
+                    
+                    switch modelState {
+                    case .ready, .error, .notDownloaded:
+                        activeDownloadTask = nil
+                        return
+                    default:
+                        try await Task.sleep(nanoseconds: 200_000_000) // 200ms
+                    }
                 }
+            } catch {
+                print("[SupertonicSynthesizer] Monitoring task cancelled or failed: \(error)")
+                activeDownloadTask = nil
             }
-        } catch is CancellationError {
-            cancelDownload()
-            modelState = .notDownloaded
-            throw CancellationError()
-        } catch {
-            cancelDownload()
-            modelState = .error(error.localizedDescription)
-            throw error
         }
     }
 
@@ -440,9 +442,17 @@ extension SupertonicSynthesizer: URLSessionDownloadDelegate {
     }
 
     func cancelDownload() {
-        backgroundSession.getAllTasks { tasks in
+        activeDownloadTask?.cancel()
+        activeDownloadTask = nil
+        
+        backgroundSession.getAllTasks { [weak self] tasks in
+            guard let self = self else { return }
             for task in tasks {
                 task.cancel()
+            }
+            Task { @MainActor in
+                self.modelState = .notDownloaded
+                self.taskProgressBytes.removeAll()
             }
         }
     }

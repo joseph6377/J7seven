@@ -6,7 +6,6 @@ struct VoicesView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var samplePlayer = VoiceSamplePlayer()
-    @State private var showModelDownload = false
     @State private var showEngineInfo = false
     @AppStorage("tts.defaultSteps") private var defaultSteps = 8
 
@@ -177,13 +176,6 @@ struct VoicesView: View {
                 EngineInfoSheet()
                     .preferredColorScheme(.light)
             }
-            .sheet(isPresented: $showModelDownload) {
-                ModelDownloadView(
-                    synthesizer: appState.supertonicSynthesizer,
-                    onReady: {}
-                )
-                .preferredColorScheme(.light)
-            }
             .onAppear {
                 if let activeSession = appState.activeSession {
                     // 1. Detect the book's dominant language
@@ -267,7 +259,7 @@ struct VoicesView: View {
 
     private func playPreview(for voice: TTSVoice) {
         if !voice.id.hasPrefix("apple-") && !isSupertonicReady() {
-            showModelDownload = true
+            appState.supertonicSynthesizer.startDownload()
         } else {
             samplePlayer.playSample(
                 for: voice,

@@ -6,9 +6,6 @@ struct WelcomeModelDownloadView: View {
     var onReady: () -> Void = {}
     var onUseApple: () -> Void = {}
 
-    @State private var hasTappedDownload = false
-    @State private var downloadTask: Task<Void, Never>? = nil
-
     var body: some View {
         VStack(spacing: 0) {
             ScrollView(showsIndicators: false) {
@@ -54,23 +51,11 @@ struct WelcomeModelDownloadView: View {
             }
         }
         .presentationDragIndicator(.visible)
-        .onChange(of: synthesizer.modelState) { _, newValue in
-            if case .ready = newValue {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                onReady()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                    dismiss()
-                }
-            }
-        }
-        .onDisappear {
-            downloadTask?.cancel()
-        }
     }
 
     // MARK: - Card Component - Supertonic
     private var supertonicCard: some View {
-        let isDownloadingState = hasTappedDownload || isDownloading(synthesizer.modelState)
+        let isDownloadingState = isDownloading(synthesizer.modelState)
         
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
@@ -114,8 +99,8 @@ struct WelcomeModelDownloadView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 18)
                 .stroke(
-                    hasTappedDownload ? Color.accentColor.opacity(0.4) : Color.primary.opacity(0.06),
-                    lineWidth: hasTappedDownload ? 1.5 : 1
+                    isDownloadingState ? Color.accentColor.opacity(0.4) : Color.primary.opacity(0.06),
+                    lineWidth: isDownloadingState ? 1.5 : 1
                 )
         )
         .shadow(color: Color.black.opacity(0.01), radius: 8, x: 0, y: 4)
@@ -123,7 +108,7 @@ struct WelcomeModelDownloadView: View {
 
     // MARK: - Card Component - Apple Native
     private var appleNativeCard: some View {
-        let isDownloadingState = hasTappedDownload || isDownloading(synthesizer.modelState)
+        let isDownloadingState = isDownloading(synthesizer.modelState)
         
         return Button {
             guard !isDownloadingState else { return }
@@ -183,37 +168,27 @@ struct WelcomeModelDownloadView: View {
     private func progressOrActionButton(_ isDownloadingState: Bool) -> some View {
         switch synthesizer.modelState {
         case .notDownloaded:
-            if !hasTappedDownload {
-                Button {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    hasTappedDownload = true
-                    downloadTask = Task {
-                        try? await synthesizer.downloadModel()
-                        downloadTask = nil
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        Label("Download Premium Engine (~350 MB)", systemImage: "arrow.down.circle.fill")
-                            .font(.j7SubheadlineBold)
-                            .foregroundStyle(.white)
-                            .padding(.vertical, 12)
-                        Spacer()
-                    }
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    )
-                    .shadow(color: Color.accentColor.opacity(0.2), radius: 5, x: 0, y: 3)
+            Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                synthesizer.startDownload()
+                onReady()
+                dismiss()
+            } label: {
+                HStack {
+                    Spacer()
+                    Label("Download Premium Engine (~350 MB)", systemImage: "arrow.down.circle.fill")
+                        .font(.j7SubheadlineBold)
+                        .foregroundStyle(.white)
+                        .padding(.vertical, 12)
+                    Spacer()
                 }
-                .buttonStyle(.plain)
-            } else {
-                ProgressView("Initiating download...")
-                    .font(.j7Caption)
-                    .tint(.accentColor)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                )
+                .shadow(color: Color.accentColor.opacity(0.2), radius: 5, x: 0, y: 3)
             }
+            .buttonStyle(.plain)
             
         case .downloading(let progress):
             VStack(spacing: 8) {
@@ -232,9 +207,7 @@ struct WelcomeModelDownloadView: View {
                 
                 Button {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    downloadTask?.cancel()
-                    downloadTask = nil
-                    hasTappedDownload = false
+                    synthesizer.cancelDownload()
                 } label: {
                     Text("Cancel Download")
                         .font(.j7CaptionBold)
@@ -285,10 +258,7 @@ struct WelcomeModelDownloadView: View {
                 
                 Button {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    downloadTask = Task {
-                        try? await synthesizer.downloadModel()
-                        downloadTask = nil
-                    }
+                    synthesizer.startDownload()
                 } label: {
                     Text("Retry Download")
                         .font(.j7CaptionBold)

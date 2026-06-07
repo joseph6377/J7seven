@@ -8,10 +8,17 @@ enum ShareError: Error {
     case extractionFailed(Error)
 }
 
+@objc private protocol URLOpener {
+    @discardableResult
+    func openURL(_ url: URL) -> Bool
+}
+
 @objc(ShareViewController)
 final class ShareViewController: UIViewController {
     
     private let activityIndicator = UIActivityIndicatorView(style: .large)
+    private var attachmentsToProcess: [NSItemProvider] = []
+    private var currentAttachmentIndex: Int = 0
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -36,14 +43,26 @@ final class ShareViewController: UIViewController {
     private func processSharedItem() {
         guard let item = extensionContext?.inputItems.first as? NSExtensionItem,
               let attachments = item.attachments,
-              let provider = attachments.first else {
+              !attachments.isEmpty else {
             complete(error: .noPayload)
             return
         }
         
+        self.attachmentsToProcess = attachments
+        self.currentAttachmentIndex = 0
+        processCurrentAttachment()
+    }
+    
+    private func processCurrentAttachment() {
+        guard currentAttachmentIndex < attachmentsToProcess.count else {
+            complete(error: .noPayload)
+            return
+        }
+        
+        let provider = attachmentsToProcess[currentAttachmentIndex]
         extractPayload(from: provider) { [weak self] result in
-            guard let self = self else { return }
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
                 switch result {
                 case .success(let payload):
                     let payloadId = UUID().uuidString
@@ -54,8 +73,9 @@ final class ShareViewController: UIViewController {
                     } catch {
                         self.complete(error: .extractionFailed(error))
                     }
-                case .failure(let error):
-                    self.complete(error: .extractionFailed(error))
+                case .failure:
+                    self.currentAttachmentIndex += 1
+                    self.processCurrentAttachment()
                 }
             }
         }
@@ -64,6 +84,7 @@ final class ShareViewController: UIViewController {
     private func extractPayload(from provider: NSItemProvider, completion: @escaping @Sendable (Result<SharedPayload, Error>) -> Void) {
         let propertyListType = UTType.propertyList.identifier
         let urlType = UTType.url.identifier
+        let textType = UTType.text.identifier
         
         if provider.hasItemConformingToTypeIdentifier(propertyListType) {
             provider.loadItem(forTypeIdentifier: propertyListType, options: nil) { item, error in
@@ -122,19 +143,61 @@ final class ShareViewController: UIViewController {
                     }
                 }
             }
+        } else if provider.hasItemConformingToTypeIdentifier(textType) {
+            provider.loadItem(forTypeIdentifier: textType, options: nil) { item, error in
+                if let error = error {
+                    DispatchQueue.main.async {
+                        completion(.failure(error))
+                    }
+                    return
+                }
+                
+                var parsedPayload: SharedPayload? = nil
+                if let text = item as? String,
+                   let url = ShareViewController.extractURL(from: text) {
+                    parsedPayload = SharedPayload(url: url, title: nil, renderedHtml: nil, jsonLd: nil)
+                }
+                
+                DispatchQueue.main.async {
+                    if let payload = parsedPayload {
+                        completion(.success(payload))
+                    } else {
+                        completion(.failure(ShareError.unsupportedPayload))
+                    }
+                }
+            }
         } else {
-            completion(.failure(ShareError.unsupportedPayload))
+            DispatchQueue.main.async {
+                completion(.failure(ShareError.unsupportedPayload))
+            }
         }
+    }
+    
+    static private func extractURL(from text: String) -> URL? {
+        if let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)), url.scheme != nil {
+            return url
+        }
+        
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return nil
+        }
+        let matches = detector.matches(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count))
+        for match in matches {
+            if let url = match.url {
+                return url
+            }
+        }
+        return nil
     }
     
     @MainActor
     private func openHostApp(payloadId: String) {
         let url = URL(string: "lysnbox://import?id=\(payloadId)&autoplay=1")!
-        // Walk responder chain to find UIApplication (extensions can't access it directly)
+        let openURLSelector = #selector(URLOpener.openURL(_:))
         var responder: UIResponder? = self
         while let r = responder {
-            if let app = r as? UIApplication {
-                app.open(url, options: [:], completionHandler: nil)
+            if r.responds(to: openURLSelector) {
+                r.perform(openURLSelector, with: url)
                 return
             }
             responder = r.next
