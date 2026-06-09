@@ -141,7 +141,7 @@
 		7B1C7CA8E932CD5688E3177F /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		7EA9AA7468F79066C83060A7 /* WebArticleImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebArticleImporter.swift; sourceTree = "<group>"; };
 		7F830A1A4A73E8F5BC2139B3 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
-		83B5BECA1EAA99295D33780A /* J7ShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = J7ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		83B5BECA1EAA99295D33780A /* J7ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = J7ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		89A618B5CFD8A7E12C6C0C8E /* SupertonicSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupertonicSynthesizer.swift; sourceTree = "<group>"; };
 		8A5987A3382761967C2AA659 /* WelcomeModelDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeModelDownloadView.swift; sourceTree = "<group>"; };
 		8DD4AAB8D5FF3CFE1D595AF8 /* XMLIndexerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMLIndexerTests.swift; sourceTree = "<group>"; };
@@ -159,7 +159,7 @@
 		BDD32908E045FD87B70E1C50 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C6D227184208A1D7133D347A /* TTSEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSEngine.swift; sourceTree = "<group>"; };
 		CD0BF5EB61BA8CB684C18289 /* PlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerService.swift; sourceTree = "<group>"; };
-		D3733D82D9C509FB55AB2661 /* BooksAppV2.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BooksAppV2.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D3733D82D9C509FB55AB2661 /* BooksAppV2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BooksAppV2.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB7634AD4B842D8591081DD7 /* EpubTextParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubTextParserTests.swift; sourceTree = "<group>"; };
 		DEAB5E54AEBAEE7318FBBE4F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		E0B8724AE38AD905382D0CFE /* onnxruntime */ = {isa = PBXFileReference; lastKnownFileType = folder; name = onnxruntime; path = Packages/onnxruntime; sourceTree = SOURCE_ROOT; };
@@ -169,7 +169,7 @@
 		F0A9506AF61422634A69EED7 /* SentenceChunker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceChunker.swift; sourceTree = "<group>"; };
 		F29D803D62D6793EA6485EB6 /* BooksAppV2UITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BooksAppV2UITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F4E3E1998CD824CBF0E654F8 /* HtmlFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HtmlFetcher.swift; sourceTree = "<group>"; };
-		FB863B351F2A8ECAF1832B0E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		FB863B351F2A8ECAF1832B0E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FE01AAD2C39105AE0380A5A8 /* Font+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Font+Theme.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -869,6 +869,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = BooksAppV2/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -892,6 +893,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = BooksAppV2/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -912,6 +914,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/Services/Web/ShareExtension/J7ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = Sources/Services/Web/ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -951,6 +954,7 @@
 				CODE_SIGN_ENTITLEMENTS = Sources/Services/Web/ShareExtension/J7ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = 82ZW244UAW;
 				INFOPLIST_FILE = Sources/Services/Web/ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -104,7 +104,15 @@ struct ContentView: View {
                         appState.showPlayer = false
                         
                         self.autoplayOnComplete = autoplay
-                        self.activePayload = payload
+                        
+                        if payload.url.isFileURL {
+                            Task {
+                                await importBook(url: payload.url)
+                                try? FileManager.default.removeItem(at: payload.url)
+                            }
+                        } else {
+                            self.activePayload = payload
+                        }
                     } catch {
                         print("[ContentView] Error reading shared payload: \(error)")
                     }

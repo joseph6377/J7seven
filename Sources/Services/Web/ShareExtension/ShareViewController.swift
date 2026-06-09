@@ -85,6 +85,9 @@ final class ShareViewController: UIViewController {
         let propertyListType = UTType.propertyList.identifier
         let urlType = UTType.url.identifier
         let textType = UTType.text.identifier
+        let pdfType = UTType.pdf.identifier
+        let epubType = UTType.epub.identifier
+        let fileURLType = UTType.fileURL.identifier
         
         if provider.hasItemConformingToTypeIdentifier(propertyListType) {
             provider.loadItem(forTypeIdentifier: propertyListType, options: nil) { item, error in
@@ -121,8 +124,16 @@ final class ShareViewController: UIViewController {
                     }
                 }
             }
-        } else if provider.hasItemConformingToTypeIdentifier(urlType) {
-            provider.loadItem(forTypeIdentifier: urlType, options: nil) { item, error in
+        } else if provider.hasItemConformingToTypeIdentifier(pdfType) ||
+                  provider.hasItemConformingToTypeIdentifier(epubType) ||
+                  provider.hasItemConformingToTypeIdentifier(fileURLType) ||
+                  provider.hasItemConformingToTypeIdentifier(urlType) {
+            
+            let matchedType = provider.hasItemConformingToTypeIdentifier(pdfType) ? pdfType :
+                              (provider.hasItemConformingToTypeIdentifier(epubType) ? epubType :
+                              (provider.hasItemConformingToTypeIdentifier(fileURLType) ? fileURLType : urlType))
+            
+            provider.loadItem(forTypeIdentifier: matchedType, options: nil) { item, error in
                 if let error = error {
                     DispatchQueue.main.async {
                         completion(.failure(error))
@@ -132,7 +143,19 @@ final class ShareViewController: UIViewController {
                 
                 var parsedPayload: SharedPayload? = nil
                 if let url = item as? URL {
-                    parsedPayload = SharedPayload(url: url, title: nil, renderedHtml: nil, jsonLd: nil)
+                    if url.isFileURL {
+                        let accessed = url.startAccessingSecurityScopedResource()
+                        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                        
+                        do {
+                            let sharedFileURL = try ShareViewController.copyFileToSharedContainer(from: url)
+                            parsedPayload = SharedPayload(url: sharedFileURL, title: url.lastPathComponent, renderedHtml: nil, jsonLd: nil)
+                        } catch {
+                            print("[ShareViewController] Error copying file: \(error)")
+                        }
+                    } else {
+                        parsedPayload = SharedPayload(url: url, title: nil, renderedHtml: nil, jsonLd: nil)
+                    }
                 }
                 
                 DispatchQueue.main.async {
@@ -173,7 +196,26 @@ final class ShareViewController: UIViewController {
         }
     }
     
-    static private func extractURL(from text: String) -> URL? {
+    nonisolated static private func copyFileToSharedContainer(from sourceURL: URL) throws -> URL {
+        guard let sharedContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.in.josepht.booksappv2") else {
+            throw ShareError.unsupportedPayload
+        }
+        
+        let destinationDirectory = sharedContainer.appendingPathComponent("SharedFiles", isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+        
+        let fileName = sourceURL.lastPathComponent
+        let destinationURL = destinationDirectory.appendingPathComponent(fileName)
+        
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            try? FileManager.default.removeItem(at: destinationURL)
+        }
+        
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        return destinationURL
+    }
+    
+    nonisolated static private func extractURL(from text: String) -> URL? {
         if let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)), url.scheme != nil {
             return url
         }
