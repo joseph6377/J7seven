@@ -82,9 +82,29 @@ struct ChapterText: Codable, Identifiable {
     }
 }
 
-struct PlaybackCursor: Codable {
+struct PlaybackCursor: Codable, Equatable {
     var chapterIndex: Int = 0
     var paragraphIndex: Int = 0      // paragraph user last reached
+    var characterOffset: Int = 0     // character offset within paragraph
+    
+    enum CodingKeys: String, CodingKey {
+        case chapterIndex
+        case paragraphIndex
+        case characterOffset
+    }
+    
+    init(chapterIndex: Int = 0, paragraphIndex: Int = 0, characterOffset: Int = 0) {
+        self.chapterIndex = chapterIndex
+        self.paragraphIndex = paragraphIndex
+        self.characterOffset = characterOffset
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.chapterIndex = try container.decodeIfPresent(Int.self, forKey: .chapterIndex) ?? 0
+        self.paragraphIndex = try container.decodeIfPresent(Int.self, forKey: .paragraphIndex) ?? 0
+        self.characterOffset = try container.decodeIfPresent(Int.self, forKey: .characterOffset) ?? 0
+    }
 }
 
 // Minimal entry for the library list

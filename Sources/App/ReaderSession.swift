@@ -284,10 +284,11 @@ final class ReaderSession: ObservableObject {
         // 2. Add seeking chars
         let targetAbsoluteCharIndex = max(0, Double(currentAbsoluteCharIndex) + charsToSeek)
         
-        // 3. Find the chapter and paragraph for the target absolute position
+        // 3. Find the chapter, paragraph, and character offset for the target absolute position
         var accumulatedChars = 0
         var targetChapterIndex = 0
         var targetParagraphIndex = 0
+        var targetCharacterOffset = 0
         var foundTarget = false
         
         for cIdx in 0..<chapters.count {
@@ -297,6 +298,7 @@ final class ReaderSession: ObservableObject {
                 if Double(accumulatedChars + count) >= targetAbsoluteCharIndex {
                     targetChapterIndex = cIdx
                     targetParagraphIndex = pIdx
+                    targetCharacterOffset = Int(targetAbsoluteCharIndex) - accumulatedChars
                     foundTarget = true
                     break
                 }
@@ -305,47 +307,25 @@ final class ReaderSession: ObservableObject {
             if foundTarget { break }
         }
         
-        // If we exceeded the total characters in the book, clamp to the very last paragraph
+        // If we exceeded the total characters in the book, clamp to the very last character of the last paragraph
         if !foundTarget {
             targetChapterIndex = chapters.count - 1
             targetParagraphIndex = max(0, chapters[targetChapterIndex].paragraphs.count - 1)
+            targetCharacterOffset = chapters[targetChapterIndex].paragraphs[targetParagraphIndex].text.count
         }
         
-        // 4. If target is the same as current paragraph, force transition to next/previous paragraph
-        if targetChapterIndex == currentChapterIndex && targetParagraphIndex == currentParagraphIndex {
-            if seconds > 0 {
-                // Skip forward: force advance to next paragraph
-                targetParagraphIndex += 1
-                if targetParagraphIndex >= chapters[targetChapterIndex].paragraphs.count {
-                    if targetChapterIndex + 1 < chapters.count {
-                        targetChapterIndex += 1
-                        targetParagraphIndex = 0
-                    } else {
-                        targetParagraphIndex = chapters[targetChapterIndex].paragraphs.count - 1
-                    }
-                }
-            } else if seconds < 0 {
-                // Skip backward: force go to previous paragraph
-                targetParagraphIndex -= 1
-                if targetParagraphIndex < 0 {
-                    if targetChapterIndex > 0 {
-                        targetChapterIndex -= 1
-                        targetParagraphIndex = chapters[targetChapterIndex].paragraphs.count - 1
-                    } else {
-                        targetParagraphIndex = 0
-                    }
-                }
-            }
-        }
-        
-        // 5. Update cursor and advance scheduler
-        let newCursor = PlaybackCursor(chapterIndex: targetChapterIndex, paragraphIndex: targetParagraphIndex)
+        // 4. Update cursor and advance scheduler
+        let newCursor = PlaybackCursor(
+            chapterIndex: targetChapterIndex,
+            paragraphIndex: targetParagraphIndex,
+            characterOffset: targetCharacterOffset
+        )
         document.cursor = newCursor
         if state == .playing { isBuffering = true }
         scheduler.advanceTo(cursor: newCursor, voice: voice)
         currentChapterIndex = targetChapterIndex
         currentParagraphIndex = targetParagraphIndex
-        activeWordRange = nil
+        activeWordRange = NSRange(location: targetCharacterOffset, length: 0)
         updateNowPlayingMetadata()
     }
 

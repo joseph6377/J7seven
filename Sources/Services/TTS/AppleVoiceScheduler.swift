@@ -76,10 +76,8 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
 
     func advanceTo(cursor: PlaybackCursor, voice: TTSVoice) {
         currentVoice = voice
-        if cursor.chapterIndex != playbackCursor.chapterIndex || cursor.paragraphIndex != playbackCursor.paragraphIndex {
-            pendingCharacterOffset = 0
-            currentCharacterOffset = 0
-        }
+        pendingCharacterOffset = cursor.characterOffset
+        currentCharacterOffset = cursor.characterOffset
         playbackCursor = cursor
         synthCursor = cursor
         stopAndClearQueue()
@@ -171,6 +169,7 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
             scheduledCount += 1
 
             synthCursor.paragraphIndex += 1
+            synthCursor.characterOffset = 0
             if synthCursor.paragraphIndex >= chapter.paragraphs.count {
                 synthCursor.chapterIndex += 1
                 synthCursor.paragraphIndex = 0

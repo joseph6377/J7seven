@@ -121,7 +121,7 @@ final class SynthScheduler: PlaybackScheduler {
         player.play()
     }
 
-    private func getSentencesAndRanges(from paragraphText: String) -> [(text: String, range: NSRange)] {
+    private func getSentencesAndRanges(from paragraphText: String, offset: Int = 0) -> [(text: String, range: NSRange)] {
         let sentenceStrings = chunkText(paragraphText)
         var results: [(text: String, range: NSRange)] = []
         var searchStartIndex = paragraphText.startIndex
@@ -132,12 +132,14 @@ final class SynthScheduler: PlaybackScheduler {
             
             if let range = paragraphText.range(of: trimmed, range: searchStartIndex..<paragraphText.endIndex) {
                 let nsRange = NSRange(range, in: paragraphText)
-                results.append((trimmed, nsRange))
+                let adjustedRange = NSRange(location: nsRange.location + offset, length: nsRange.length)
+                results.append((trimmed, adjustedRange))
                 searchStartIndex = range.upperBound
             } else {
                 if let range = paragraphText.range(of: trimmed) {
                     let nsRange = NSRange(range, in: paragraphText)
-                    results.append((trimmed, nsRange))
+                    let adjustedRange = NSRange(location: nsRange.location + offset, length: nsRange.length)
+                    results.append((trimmed, adjustedRange))
                 }
             }
         }
@@ -165,10 +167,19 @@ final class SynthScheduler: PlaybackScheduler {
                 continue
             }
 
-            let text = chapter.paragraphs[synthCursor.paragraphIndex].text
+            var text = chapter.paragraphs[synthCursor.paragraphIndex].text
+            var trimOffset = 0
+            if scheduledCount == 0 && synthCursor.characterOffset > 0 {
+                if synthCursor.characterOffset < text.utf16.count {
+                    trimOffset = synthCursor.characterOffset
+                    let index = String.Index(utf16Offset: trimOffset, in: text)
+                    text = String(text[index...])
+                }
+                synthCursor.characterOffset = 0
+            }
             let currentLoopCursor = synthCursor
 
-            let sentences = getSentencesAndRanges(from: text)
+            let sentences = getSentencesAndRanges(from: text, offset: trimOffset)
             let finalSentences = sentences.isEmpty ? [(text, NSRange(location: 0, length: text.utf16.count))] : sentences
 
             let stream = synthesizer.synthesize(text, voice: voice, options: SynthOptions(steps: steps))
@@ -244,6 +255,7 @@ final class SynthScheduler: PlaybackScheduler {
             }
 
             synthCursor.paragraphIndex += 1
+            synthCursor.characterOffset = 0
             if synthCursor.paragraphIndex >= chapter.paragraphs.count {
                 synthCursor.chapterIndex += 1
                 synthCursor.paragraphIndex = 0
@@ -280,7 +292,11 @@ final class SynthScheduler: PlaybackScheduler {
     }
 
     private func setActiveSentence(_ sentence: ScheduledSentence) {
-        playbackCursor = PlaybackCursor(chapterIndex: sentence.chapterIndex, paragraphIndex: sentence.paragraphIndex)
+        playbackCursor = PlaybackCursor(
+            chapterIndex: sentence.chapterIndex,
+            paragraphIndex: sentence.paragraphIndex,
+            characterOffset: sentence.range.location
+        )
         
         // Heavy disk writes and scroll updates are throttled so they only fire on true paragraph transitions
         if lastNotifiedParagraphCursor?.chapterIndex != sentence.chapterIndex ||
