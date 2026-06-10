@@ -327,15 +327,7 @@ struct LibraryView: View {
                 Button {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     // Tap on the card details: Load document and open the full-screen player
-                    if let doc = appState.libraryService.loadDocument(id: recentBook.id) {
-                        appState.activeSession = ReaderSession(
-                            document: doc,
-                            player: appState.playerService,
-                            scheduler: appState.activeScheduler,
-                            libraryService: appState.libraryService
-                        )
-                        appState.showPlayer = true
-                    }
+                    appState.openDocument(recentBook)
                 } label: {
                     HStack(spacing: 14) {
                         // Left: Cover Art Image
@@ -867,6 +859,12 @@ struct LibraryView: View {
                     favoriteButton(id: entry.id)
                     
                     Button(role: .destructive) {
+                        if UserDefaults.standard.string(forKey: AppState.activeBookIdKey) == entry.id.uuidString {
+                            UserDefaults.standard.removeObject(forKey: AppState.activeBookIdKey)
+                            if appState.activeSession?.document.id == entry.id {
+                                appState.activeSession = nil
+                            }
+                        }
                         appState.libraryService.deleteDocument(id: entry.id)
                         appState.refresh()
                     } label: {
@@ -895,6 +893,12 @@ struct LibraryView: View {
                     favoriteButton(id: entry.id)
                     
                     Button(role: .destructive) {
+                        if UserDefaults.standard.string(forKey: AppState.activeBookIdKey) == entry.id.uuidString {
+                            UserDefaults.standard.removeObject(forKey: AppState.activeBookIdKey)
+                            if appState.activeSession?.document.id == entry.id {
+                                appState.activeSession = nil
+                            }
+                        }
                         appState.libraryService.deleteDocument(id: entry.id)
                         appState.refresh()
                     } label: {

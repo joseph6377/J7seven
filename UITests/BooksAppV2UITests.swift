@@ -116,6 +116,13 @@ final class BooksAppV2UITests: XCTestCase {
         XCTAssertTrue(lysnboxCell.waitForExistence(timeout: 15), "LysnBox option should appear in Safari Share Sheet.")
         lysnboxCell.tap()
         
+        // Handle the system confirmation alert "Open in “LysnBox”?"
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let openButton = springboard.alerts.buttons["Open"]
+        if openButton.waitForExistence(timeout: 8) {
+            openButton.tap()
+        }
+        
         // 5. Verify that LysnBox is opened
         let lysnboxApp = XCUIApplication(bundleIdentifier: "in.josepht.booksappv2")
         XCTAssertTrue(lysnboxApp.wait(for: .runningForeground, timeout: 15), "LysnBox app should launch and come to the foreground.")

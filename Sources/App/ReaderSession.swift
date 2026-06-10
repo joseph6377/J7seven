@@ -180,6 +180,7 @@ final class ReaderSession: ObservableObject {
             self.playbackError = error
             self.isBuffering = false
             self.state = .paused
+            UserDefaults.standard.set(false, forKey: "diag.wasPlaying")
             self.updateNowPlayingMetadata(isPlayingOverride: false)
         }
     }
@@ -193,6 +194,7 @@ final class ReaderSession: ObservableObject {
             scheduler.start(from: document.cursor, in: document, voice: voice)
         }
         state = .playing
+        UserDefaults.standard.set(true, forKey: "diag.wasPlaying")
         updateNowPlayingMetadata(isPlayingOverride: true)
     }
 
@@ -200,6 +202,7 @@ final class ReaderSession: ObservableObject {
         scheduler.pause()
         state = .paused
         isBuffering = false
+        UserDefaults.standard.set(false, forKey: "diag.wasPlaying")
         updateNowPlayingMetadata(isPlayingOverride: false)
     }
 

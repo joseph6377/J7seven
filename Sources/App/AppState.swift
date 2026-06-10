@@ -3,6 +3,8 @@ import SwiftUI
 @Observable
 @MainActor
 final class AppState {
+    static let activeBookIdKey = "session.activeBookId"
+
     let libraryService:        LibraryService
     let playerService:         PlayerService
     let supertonicSynthesizer: SupertonicSynthesizer
@@ -65,6 +67,7 @@ final class AppState {
             UserDefaults.standard.set(true, forKey: "library.onboarding.showcased")
             UserDefaults.standard.set(true, forKey: "hasSeenWelcomeDownloadPrompt")
             UserDefaults.standard.set(TTSEngine.apple.rawValue, forKey: "tts.engine")
+            UserDefaults.standard.removeObject(forKey: Self.activeBookIdKey)
         }
 
         let saved = UserDefaults.standard.string(forKey: "tts.engine")
@@ -119,6 +122,28 @@ final class AppState {
         }
 
         performMigration()
+
+        // Jetsam diagnostics
+        if UserDefaults.standard.bool(forKey: "diag.wasPlaying") {
+            print("[Diag] Previous session terminated while playing — likely jetsam")
+            let count = UserDefaults.standard.integer(forKey: "diag.jetsamWhilePlayingCount")
+            UserDefaults.standard.set(count + 1, forKey: "diag.jetsamWhilePlayingCount")
+            UserDefaults.standard.set(false, forKey: "diag.wasPlaying")
+        }
+
+        restoreLastSession()
+    }
+
+    private func restoreLastSession() {
+        guard activeSession == nil,
+              let idString = UserDefaults.standard.string(forKey: Self.activeBookIdKey),
+              let id = UUID(uuidString: idString) else { return }
+        guard let doc = libraryService.loadDocument(id: id) else {
+            UserDefaults.standard.removeObject(forKey: Self.activeBookIdKey) // book deleted
+            return
+        }
+        activeSession = ReaderSession(document: doc, player: playerService,
+                                      scheduler: activeScheduler, libraryService: libraryService)
     }
 
     func refresh() {
@@ -152,6 +177,7 @@ final class AppState {
                 scheduler: activeScheduler,
                 libraryService: libraryService
             )
+            UserDefaults.standard.set(doc.id.uuidString, forKey: Self.activeBookIdKey)
             showPlayer = true
         }
     }

@@ -33,6 +33,9 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
     // Maps ObjectIdentifier(utterance) → PlaybackCursor
     private var utteranceCursorMap: [ObjectIdentifier: PlaybackCursor] = [:]
     private var currentUtteranceId: ObjectIdentifier? = nil
+    private var currentCharacterOffset: Int = 0
+    private var pendingCharacterOffset: Int = 0
+    private var utteranceSliceOffsetMap: [ObjectIdentifier: Int] = [:]
 
     override init() {
         super.init()
@@ -64,6 +67,8 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
         synthCursor = cursor
         isPlaying = true
         isWaitingForFirstUtterance = true
+        pendingCharacterOffset = 0
+        currentCharacterOffset = 0
         stopAndClearQueue()
         onParagraphStartedPlaying?(cursor)
         enqueueNextParagraphs()
@@ -71,6 +76,10 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
 
     func advanceTo(cursor: PlaybackCursor, voice: TTSVoice) {
         currentVoice = voice
+        if cursor.chapterIndex != playbackCursor.chapterIndex || cursor.paragraphIndex != playbackCursor.paragraphIndex {
+            pendingCharacterOffset = 0
+            currentCharacterOffset = 0
+        }
         playbackCursor = cursor
         synthCursor = cursor
         stopAndClearQueue()
@@ -106,8 +115,11 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
 
     func setRate(_ rate: Float) {
         currentRate = Self.utteranceRate(for: rate)
+        pendingCharacterOffset = currentCharacterOffset
         if isPlaying {
             advanceTo(cursor: playbackCursor, voice: currentVoice)
+        } else {
+            stopAndClearQueue()
         }
     }
 
@@ -116,6 +128,7 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
     private func stopAndClearQueue() {
         synth.stopSpeaking(at: .immediate)
         utteranceCursorMap.removeAll()
+        utteranceSliceOffsetMap.removeAll()
         currentUtteranceId = nil
         scheduledCount = 0
     }
@@ -135,12 +148,25 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
                 continue
             }
 
-            let text = chapter.paragraphs[synthCursor.paragraphIndex].text
+            var text = chapter.paragraphs[synthCursor.paragraphIndex].text
+            var sliceOffset = 0
+            
+            if scheduledCount == 0 && pendingCharacterOffset > 0 {
+                if pendingCharacterOffset < text.utf16.count {
+                    let index = String.Index(utf16Offset: pendingCharacterOffset, in: text)
+                    text = String(text[index...])
+                    sliceOffset = pendingCharacterOffset
+                }
+                pendingCharacterOffset = 0
+            }
+
             let utterance = AVSpeechUtterance(string: text)
             utterance.voice = avVoice
             utterance.rate = rate
 
-            utteranceCursorMap[ObjectIdentifier(utterance)] = synthCursor
+            let utteranceId = ObjectIdentifier(utterance)
+            utteranceSliceOffsetMap[utteranceId] = sliceOffset
+            utteranceCursorMap[utteranceId] = synthCursor
             synth.speak(utterance)
             scheduledCount += 1
 
@@ -173,6 +199,8 @@ extension AppleVoiceScheduler: AVSpeechSynthesizerDelegate {
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.currentUtteranceId = id
+            let sliceOffset = self.utteranceSliceOffsetMap[id] ?? 0
+            self.currentCharacterOffset = sliceOffset
             if isWaitingForFirstUtterance {
                 isWaitingForFirstUtterance = false
                 onFirstAudioReady?()
@@ -189,6 +217,7 @@ extension AppleVoiceScheduler: AVSpeechSynthesizerDelegate {
         Task { @MainActor [weak self] in
             guard let self else { return }
             utteranceCursorMap.removeValue(forKey: id)
+            utteranceSliceOffsetMap.removeValue(forKey: id)
             scheduledCount = max(0, scheduledCount - 1)
             if isPlaying {
                 enqueueNextParagraphs()
@@ -199,7 +228,9 @@ extension AppleVoiceScheduler: AVSpeechSynthesizerDelegate {
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         let id = ObjectIdentifier(utterance)
         Task { @MainActor [weak self] in
-            self?.utteranceCursorMap.removeValue(forKey: id)
+            guard let self else { return }
+            self.utteranceCursorMap.removeValue(forKey: id)
+            self.utteranceSliceOffsetMap.removeValue(forKey: id)
         }
     }
 
@@ -208,7 +239,10 @@ extension AppleVoiceScheduler: AVSpeechSynthesizerDelegate {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             guard self.currentUtteranceId == id else { return }
-            self.onWordRangeChanged?(characterRange)
+            let sliceOffset = self.utteranceSliceOffsetMap[id] ?? 0
+            self.currentCharacterOffset = sliceOffset + characterRange.location
+            let adjustedRange = NSRange(location: characterRange.location + sliceOffset, length: characterRange.length)
+            self.onWordRangeChanged?(adjustedRange)
         }
     }
 }
