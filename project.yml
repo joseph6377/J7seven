@@ -125,7 +125,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CURRENT_PROJECT_VERSION: 8
-        MARKETING_VERSION: 1.0
+        MARKETING_VERSION: 1.0.2
         INFOPLIST_FILE: BooksAppV2/Info.plist
         CODE_SIGN_STYLE: Automatic
         # DEVELOPMENT_TEAM: "537JMFBG2B"
@@ -145,7 +145,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         # DEVELOPMENT_TEAM: "537JMFBG2B"
         CURRENT_PROJECT_VERSION: 8
-        MARKETING_VERSION: 1.0
+        MARKETING_VERSION: 1.0.2
     entitlements:
       path: Sources/Services/Web/ShareExtension/J7ShareExtension.entitlements
       properties:
