@@ -22,7 +22,7 @@ struct VoicesView: View {
     private var appleVoices: [TTSVoice] { appState.appleVoiceScheduler.cachedVoices }
 
     private var availableLanguages: [String] {
-        ["en", "es", "fr", "de", "ja", "ko", "it", "pt"]
+        TTSVoice.supportedLanguages
     }
 
     private var filteredSupertonicVoices: [TTSVoice] {
@@ -555,6 +555,29 @@ final class VoiceSamplePlayer: NSObject, AVSpeechSynthesizerDelegate {
             case "F5": return "안녕하세요, 지우입니다. 부드럽고 우아한 흐름으로 시와 희곡, 그리고 클래식 산문에 생명을 불어넣습니다."
             default: break
             }
+        case "ru": return "Здравствуйте! Меня зовут \(voice.name). Это пример моего голоса."
+        case "ar": return "مرحباً! أنا \(voice.name). هذا عرض مسبق لصوتي."
+        case "hi": return "नमस्ते! मैं \(voice.name) हूँ। यह मेरी आवाज़ का एक पूर्वावलोकन है।"
+        case "nl": return "Hallo! Ik ben \(voice.name). Dit is een voorproefje van mijn stem."
+        case "pl": return "Cześć! Jestem \(voice.name). To jest próbka mojego głosu."
+        case "sv": return "Hej! Jag är \(voice.name). Det här är ett prov på min röst."
+        case "da": return "Hej! Jeg er \(voice.name). Dette er en smagsprøve på min stemme."
+        case "fi": return "Hei! Olen \(voice.name). Tämä on näyte äänestäni."
+        case "cs": return "Ahoj! Já jsem \(voice.name). Toto je ukázka mého hlasu."
+        case "sk": return "Ahoj! Ja som \(voice.name). Toto je ukážka môjho hlasu."
+        case "sl": return "Živijo! Sem \(voice.name). To je predogled mojega glasu."
+        case "hr": return "Bok! Ja sam \(voice.name). Ovo je pregled mojeg glasa."
+        case "hu": return "Szia! \(voice.name) vagyok. Ez egy minta a hangomból."
+        case "ro": return "Bună! Eu sunt \(voice.name). Aceasta este o previzualizare a vocii mele."
+        case "bg": return "Здравейте! Аз съм \(voice.name). Това е демонстрация на моя глас."
+        case "el": return "Γεια σας! Το όνομά μου είναι \(voice.name). Αυτό είναι ένα δείγμα της φωνής μου."
+        case "et": return "Tere! Mina olen \(voice.name). See on minu hääle näidis."
+        case "lv": return "Sveiki! Es esmu \(voice.name). Šis ir mans balss paraugs."
+        case "lt": return "Sveiki! Aš esu \(voice.name). Tai yra mano balso pavyzdys."
+        case "tr": return "Merhaba! Ben \(voice.name). Bu, sesimin bir önizlemesidir."
+        case "uk": return "Привіт! Я \(voice.name). Це приклад мого голосу."
+        case "vi": return "Xin chào! Tôi là \(voice.name). Đây là bản nghe thử giọng nói của tôi."
+        case "id": return "Halo! Saya \(voice.name). Ini adalah pratinjau suara saya."
         default:
             // English / Fallback
             switch baseId {

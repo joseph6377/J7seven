@@ -16,6 +16,7 @@
 		1D27906CE56FB152E98B2DEE /* XMLIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99135E353E149B7CFEFE1355 /* XMLIndexer.swift */; };
 		22CBCB4148E9FC67F0049519 /* ReaderSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01957373D942D8C9D515C3D3 /* ReaderSession.swift */; };
 		26639656FF51C20B13BE215F /* PastedTextImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C1FA1A2D3A0D85A29529B64 /* PastedTextImporter.swift */; };
+		2762A97B0235FCE7632EDB96 /* TTSVoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E52BC3BD8BED16B6672AE780 /* TTSVoiceTests.swift */; };
 		3075795EEC9751BD78F2A039 /* LibraryPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00B41DF92508BAE018105C5 /* LibraryPaths.swift */; };
 		330DD9843F3F4283881ABE74 /* SupertonicSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A618B5CFD8A7E12C6C0C8E /* SupertonicSynthesizer.swift */; };
 		3DD2B891BDF9AD61CBA265BD /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1C7CA8E932CD5688E3177F /* AppState.swift */; };
@@ -163,6 +164,7 @@
 		DB7634AD4B842D8591081DD7 /* EpubTextParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubTextParserTests.swift; sourceTree = "<group>"; };
 		DEAB5E54AEBAEE7318FBBE4F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		E0B8724AE38AD905382D0CFE /* onnxruntime */ = {isa = PBXFileReference; lastKnownFileType = folder; name = onnxruntime; path = Packages/onnxruntime; sourceTree = SOURCE_ROOT; };
+		E52BC3BD8BED16B6672AE780 /* TTSVoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSVoiceTests.swift; sourceTree = "<group>"; };
 		E97757B67B974D69D2BF9345 /* TTSVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSVoice.swift; sourceTree = "<group>"; };
 		E9C70791099EC45E3ECB4613 /* BooksAppShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BooksAppShareExtension.entitlements; sourceTree = "<group>"; };
 		EBD3451DCCA48F6BA1D91E6F /* SharePreprocessor.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = SharePreprocessor.js; sourceTree = "<group>"; };
@@ -341,6 +343,7 @@
 				515448E9B0D70BBB080E8A6E /* LibraryServiceTests.swift */,
 				152CFDC5E17E824E30B01516 /* PastedTextImporterTests.swift */,
 				4A77667851655F922E03A003 /* PdfTextParserTests.swift */,
+				E52BC3BD8BED16B6672AE780 /* TTSVoiceTests.swift */,
 				AC8120B996CD9C1ACDFA155E /* WebArticleImporterTests.swift */,
 				8DD4AAB8D5FF3CFE1D595AF8 /* XMLIndexerTests.swift */,
 				A199160585E95BA515FBDDE5 /* ZipExtractorTests.swift */,
@@ -639,6 +642,7 @@
 				B2BB0B94939D382ABE850999 /* LibraryServiceTests.swift in Sources */,
 				FA6171F7624AC81489CD39DA /* PastedTextImporterTests.swift in Sources */,
 				B96E82446D146592D94E478E /* PdfTextParserTests.swift in Sources */,
+				2762A97B0235FCE7632EDB96 /* TTSVoiceTests.swift in Sources */,
 				91232423BA4111EE4A8BCC82 /* WebArticleImporterTests.swift in Sources */,
 				6A15D9CA87511654DB4285A4 /* XMLIndexerTests.swift in Sources */,
 				12F914A4B235F4C733904AE4 /* ZipExtractorTests.swift in Sources */,
@@ -876,7 +880,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = in.josepht.booksappv2;
 				PRODUCT_NAME = BooksAppV2;
 				SDKROOT = iphoneos;
@@ -900,7 +904,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = in.josepht.booksappv2;
 				PRODUCT_NAME = BooksAppV2;
 				SDKROOT = iphoneos;
@@ -922,7 +926,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = in.josepht.booksappv2.ShareExtension;
 				PRODUCT_NAME = J7ShareExtension;
 				SDKROOT = iphoneos;
@@ -962,7 +966,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = in.josepht.booksappv2.ShareExtension;
 				PRODUCT_NAME = J7ShareExtension;
 				SDKROOT = iphoneos;

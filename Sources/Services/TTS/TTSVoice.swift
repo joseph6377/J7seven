@@ -12,125 +12,65 @@ struct TTSVoice: Identifiable, Hashable, Codable {
 
     static let `default` = TTSVoice(id: "M1-en", name: "Marcus", language: "en", gender: .male)
 
+    static let supportedLanguages: [String] = [
+        "en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el", "es", "et", "fi", "fr", "hi", "hr", "hu", "id", "it", "lt", "lv", "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "tr", "uk", "vi"
+    ]
+
+    static let languageVoiceNames: [String: [String]] = [
+        "en": ["Marcus", "Nathan", "Oliver", "Paul", "Ryan", "Alice", "Beth", "Claire", "Diana", "Eve"],
+        "es": ["Mateo", "Santiago", "Alejandro", "Sebastián", "Javier", "Valentina", "Sofía", "Camila", "Isabella", "Valeria"],
+        "fr": ["Gabriel", "Lucas", "Arthur", "Louis", "Hugo", "Emma", "Chloé", "Manon", "Léa", "Inès"],
+        "de": ["Maximilian", "Lukas", "Jonas", "Finn", "Elias", "Marie", "Sophie", "Charlotte", "Emilia", "Mia"],
+        "it": ["Leonardo", "Francesco", "Alessandro", "Lorenzo", "Mattia", "Sofia", "Aurora", "Giulia", "Ginevra", "Beatrice"],
+        "pt": ["Miguel", "Arthur", "Heitor", "Bernardo", "Davi", "Helena", "Alice", "Laura", "Manuela", "Isabella"],
+        "ja": ["Hiroto", "Ren", "Yuto", "Minato", "Haruto", "Himari", "Tsumugi", "Aoi", "Ichika", "Mei"],
+        "ko": ["Minjun", "Seojun", "Doyun", "Yujun", "Eunwoo", "Seo-a", "Ji-an", "Hayoon", "Seoyoon", "Jiwoo"],
+        "ru": ["Aleksandr", "Dmitri", "Mikhail", "Ivan", "Nikolai", "Anastasia", "Sofia", "Maria", "Daria", "Polina"],
+        "ar": ["Omar", "Youssef", "Karim", "Ali", "Hassan", "Layla", "Fatima", "Mariam", "Nour", "Salma"],
+        "hi": ["Aarav", "Vihaan", "Arjun", "Rohan", "Aditya", "Aanya", "Diya", "Saanvi", "Priya", "Isha"],
+        "nl": ["Daan", "Luuk", "Bram", "Sem", "Milan", "Emma", "Sophie", "Julia", "Zoë", "Tess"],
+        "pl": ["Antoni", "Jakub", "Jan", "Szymon", "Aleksander", "Zuzanna", "Julia", "Zofia", "Hanna", "Maja"],
+        "sv": ["Elias", "Hugo", "Oliver", "Liam", "Alexander", "Alice", "Maja", "Elsa", "Astrid", "Wilma"],
+        "da": ["William", "Noah", "Oskar", "Lucas", "Carl", "Emma", "Alma", "Ida", "Clara", "Sofia"],
+        "fi": ["Leo", "Eino", "Oliver", "Elias", "Onni", "Aino", "Olivia", "Sofia", "Lilja", "Helmi"],
+        "cs": ["Jakub", "Jan", "Tomáš", "Matyáš", "Filip", "Eliška", "Anna", "Adéla", "Tereza", "Sofie"],
+        "sk": ["Jakub", "Samuel", "Michal", "Adam", "Filip", "Sofia", "Ema", "Nina", "Viktória", "Natália"],
+        "sl": ["Luka", "Filip", "Jakob", "Nik", "Mark", "Zala", "Mia", "Hana", "Ema", "Julija"],
+        "hr": ["Luka", "David", "Jakov", "Ivan", "Petar", "Mia", "Lucija", "Sara", "Nika", "Marta"],
+        "hu": ["Bence", "Máté", "Levente", "Dávid", "Balázs", "Hanna", "Anna", "Zoé", "Luca", "Léna"],
+        "ro": ["Andrei", "Alexandru", "Gabriel", "Ionuț", "Ștefan", "Maria", "Elena", "Ioana", "Andreea", "Alexandra"],
+        "bg": ["Georgi", "Ivan", "Dimitar", "Aleksandar", "Nikola", "Maria", "Ivana", "Elena", "Yoana", "Alexandra"],
+        "el": ["Georgios", "Ioannis", "Konstantinos", "Dimitrios", "Nikolaos", "Maria", "Eleni", "Aikaterini", "Vasiliki", "Sofia"],
+        "et": ["Rasmus", "Robin", "Artjom", "Oliver", "Mark", "Sofia", "Eliise", "Sandra", "Laura", "Maria"],
+        "lv": ["Roberts", "Gustavs", "Daniels", "Aleksandrs", "Maksims", "Sofija", "Emilija", "Alise", "Marta", "Anna"],
+        "lt": ["Dominykas", "Jonas", "Lukas", "Matas", "Kajus", "Emilija", "Gabija", "Austėja", "Ugnė", "Kamilė"],
+        "tr": ["Yusuf", "Mustafa", "Ahmet", "Ömer", "Ali", "Zeynep", "Elif", "Defne", "Hiranur", "Eylül"],
+        "uk": ["Artem", "Oleksandr", "Dmytro", "Vladyslav", "Maksym", "Sofiya", "Anastasiya", "Mariya", "Anna", "Viktoriya"],
+        "vi": ["Minh", "Nam", "Duc", "Huy", "Phong", "Linh", "Hoa", "Lan", "Mai", "Vy"],
+        "id": ["Budi", "Joko", "Agus", "Hendra", "Aditya", "Siti", "Dewi", "Sri", "Putri", "Indah"]
+    ]
+
     static func nameFor(baseId: String, lang: String) -> String {
-        switch lang {
-        case "es":
-            switch baseId {
-            case "M1": return "Mateo"
-            case "M2": return "Santiago"
-            case "M3": return "Alejandro"
-            case "M4": return "Sebastián"
-            case "M5": return "Javier"
-            case "F1": return "Valentina"
-            case "F2": return "Sofía"
-            case "F3": return "Camila"
-            case "F4": return "Isabella"
-            case "F5": return "Valeria"
-            default: return "Mateo"
-            }
-        case "fr":
-            switch baseId {
-            case "M1": return "Gabriel"
-            case "M2": return "Lucas"
-            case "M3": return "Arthur"
-            case "M4": return "Louis"
-            case "M5": return "Hugo"
-            case "F1": return "Emma"
-            case "F2": return "Chloé"
-            case "F3": return "Manon"
-            case "F4": return "Léa"
-            case "F5": return "Inès"
-            default: return "Gabriel"
-            }
-        case "de":
-            switch baseId {
-            case "M1": return "Maximilian"
-            case "M2": return "Lukas"
-            case "M3": return "Jonas"
-            case "M4": return "Finn"
-            case "M5": return "Elias"
-            case "F1": return "Marie"
-            case "F2": return "Sophie"
-            case "F3": return "Charlotte"
-            case "F4": return "Emilia"
-            case "F5": return "Mia"
-            default: return "Maximilian"
-            }
-        case "it":
-            switch baseId {
-            case "M1": return "Leonardo"
-            case "M2": return "Francesco"
-            case "M3": return "Alessandro"
-            case "M4": return "Lorenzo"
-            case "M5": return "Mattia"
-            case "F1": return "Sofia"
-            case "F2": return "Aurora"
-            case "F3": return "Giulia"
-            case "F4": return "Ginevra"
-            case "F5": return "Beatrice"
-            default: return "Leonardo"
-            }
-        case "pt":
-            switch baseId {
-            case "M1": return "Miguel"
-            case "M2": return "Arthur"
-            case "M3": return "Heitor"
-            case "M4": return "Bernardo"
-            case "M5": return "Davi"
-            case "F1": return "Helena"
-            case "F2": return "Alice"
-            case "F3": return "Laura"
-            case "F4": return "Manuela"
-            case "F5": return "Isabella"
-            default: return "Miguel"
-            }
-        case "ja":
-            switch baseId {
-            case "M1": return "Hiroto"
-            case "M2": return "Ren"
-            case "M3": return "Yuto"
-            case "M4": return "Minato"
-            case "M5": return "Haruto"
-            case "F1": return "Himari"
-            case "F2": return "Tsumugi"
-            case "F3": return "Aoi"
-            case "F4": return "Ichika"
-            case "F5": return "Mei"
-            default: return "Hiroto"
-            }
-        case "ko":
-            switch baseId {
-            case "M1": return "Minjun"
-            case "M2": return "Seojun"
-            case "M3": return "Doyun"
-            case "M4": return "Yujun"
-            case "M5": return "Eunwoo"
-            case "F1": return "Seo-a"
-            case "F2": return "Ji-an"
-            case "F3": return "Hayoon"
-            case "F4": return "Seoyoon"
-            case "F5": return "Jiwoo"
-            default: return "Minjun"
-            }
-        default: // English fallback
-            switch baseId {
-            case "M1": return "Marcus"
-            case "M2": return "Nathan"
-            case "M3": return "Oliver"
-            case "M4": return "Paul"
-            case "M5": return "Ryan"
-            case "F1": return "Alice"
-            case "F2": return "Beth"
-            case "F3": return "Claire"
-            case "F4": return "Diana"
-            case "F5": return "Eve"
-            default: return "Marcus"
-            }
+        let names = languageVoiceNames[lang] ?? languageVoiceNames["en"]!
+        let index: Int
+        switch baseId {
+        case "M1": index = 0
+        case "M2": index = 1
+        case "M3": index = 2
+        case "M4": index = 3
+        case "M5": index = 4
+        case "F1": index = 5
+        case "F2": index = 6
+        case "F3": index = 7
+        case "F4": index = 8
+        case "F5": index = 9
+        default: index = 0
         }
+        return names[index]
     }
 
     /// Voice IDs match the filenames in Supertone/supertonic-3/voice_styles/ on HuggingFace.
-    /// Dynamically generated for all 8 supported languages.
+    /// Dynamically generated for all supported languages.
     static func loadAll() -> [TTSVoice] {
         let baseVoices = [
             (id: "M1", gender: Gender.male),
@@ -145,10 +85,8 @@ struct TTSVoice: Identifiable, Hashable, Codable {
             (id: "F5", gender: Gender.female)
         ]
 
-        let languages = ["en", "es", "fr", "de", "ja", "ko", "it", "pt"]
-
         var allVoices = [TTSVoice]()
-        for lang in languages {
+        for lang in supportedLanguages {
             for base in baseVoices {
                 let name = nameFor(baseId: base.id, lang: lang)
                 allVoices.append(TTSVoice(
