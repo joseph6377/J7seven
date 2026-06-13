@@ -86,10 +86,16 @@ enum ZipExtractor {
             let name = decodeName(nameData)
             guard !name.isEmpty else { continue }
 
-            // Zip-slip guard: never write outside the destination directory.
+            // Zip-slip guard: validate the entry name itself rather than comparing
+            // resolved filesystem paths. On iOS the destination dir exists (so its
+            // path resolves the /var→/private/var symlink) while the not-yet-created
+            // entry path does not, making a path-prefix check reject every entry.
+            // Name-based validation is filesystem-independent and immune to that.
+            let normalizedName = name.replacingOccurrences(of: "\\", with: "/")
+            let comps = normalizedName.split(separator: "/", omittingEmptySubsequences: true)
+            guard !normalizedName.hasPrefix("/"), !comps.contains("..") else { continue }
+
             let dest = destURL.appendingPathComponent(name).standardizedFileURL
-            guard dest.path.hasPrefix(destURL.standardizedFileURL.path + "/")
-                    || dest.path == destURL.standardizedFileURL.path else { continue }
 
             if name.hasSuffix("/") {
                 try? fm.createDirectory(at: dest, withIntermediateDirectories: true)

@@ -323,7 +323,13 @@ final class EpubRobustnessTests: XCTestCase {
     func testZipSlipEntrySkipped() throws {
         var builder = EpubFixtureBuilder()
         builder.addFile("safe.txt", "safe")
+        // Nested entry mirrors real EPUB layout (OEBPS/...). The zip-slip guard must
+        // not reject legitimate nested entries — a regression here skipped *every*
+        // entry on-device (path-prefix check vs symlink-resolved destination).
+        builder.addFile("OEBPS/sub/content.opf", "package")
         builder.addRawEntry(nameBytes: Data("../evil.txt".utf8),
+                            content: Data("evil".utf8), utf8Flag: true)
+        builder.addRawEntry(nameBytes: Data("/abs/evil.txt".utf8),
                             content: Data("evil".utf8), utf8Flag: true)
         let zipURL = tempDirURL.appendingPathComponent("slip.zip")
         try builder.write(to: zipURL)
@@ -331,7 +337,10 @@ final class EpubRobustnessTests: XCTestCase {
         try ZipExtractor.extract(zipURL, to: out)
         let fm = FileManager.default
         XCTAssertTrue(fm.fileExists(atPath: out.appendingPathComponent("safe.txt").path))
+        XCTAssertTrue(fm.fileExists(atPath: out.appendingPathComponent("OEBPS/sub/content.opf").path),
+                      "legitimate nested entry must extract")
         XCTAssertFalse(fm.fileExists(
-            atPath: out.deletingLastPathComponent().appendingPathComponent("evil.txt").path))
+            atPath: out.deletingLastPathComponent().appendingPathComponent("evil.txt").path),
+            "../ traversal must be blocked")
     }
 }
