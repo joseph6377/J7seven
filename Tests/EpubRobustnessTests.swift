@@ -109,6 +109,20 @@ final class EpubRobustnessTests: XCTestCase {
         XCTAssertEqual(book.chapters[0].paragraphs.map(\.text), ["Real text."])
     }
 
+    func testDropCapInlineSpanKeepsReadingOrder() throws {
+        // A drop-cap span must join seamlessly with the following text, not get
+        // reordered to the end: "<span>I</span>n 1862" -> "In 1862".
+        let data = Data(EpubFixtureBuilder.xhtml(
+            body: "<p><span class=\"dropcap\">I</span>n 1862 when X.</p>").utf8)
+        XCTAssertEqual(ChapterTextExtractor.extract(from: data).map(\.text), ["In 1862 when X."])
+    }
+
+    func testInlineEmphasisSpacingPreserved() throws {
+        let data = Data(EpubFixtureBuilder.xhtml(
+            body: "<p>Hello <em>brave</em> world</p>").utf8)
+        XCTAssertEqual(ChapterTextExtractor.extract(from: data).map(\.text), ["Hello brave world"])
+    }
+
     func testMalformedChapterRescuedBySwiftSoup() throws {
         // Unclosed <p>, raw ampersand, HTML-only entity: strict XML parsing aborts.
         let html = """
@@ -318,6 +332,42 @@ final class EpubRobustnessTests: XCTestCase {
         let fm = FileManager.default
         XCTAssertFalse(fm.fileExists(atPath: out.appendingPathComponent("first.txt").path))
         XCTAssertTrue(fm.fileExists(atPath: out.appendingPathComponent("second.txt").path))
+    }
+
+    // MARK: - Spoken-title dedup
+
+    private func para(_ s: String) -> Paragraph { Paragraph(text: s, pageNumber: nil) }
+
+    func testSpokenTitleStripsSplitEmbeddedTitle() {
+        // Book embeds the chapter number and name as two separate body lines.
+        let ct = ChapterText.withSpokenTitle(
+            index: 0, title: "1. A Painter Prince",
+            paragraphs: [para("1"), para("A Painter Prince"), para("In 1862 when Ravi Varma...")])
+        XCTAssertEqual(ct.paragraphs.map(\.text),
+                       ["1. A Painter Prince", "In 1862 when Ravi Varma..."])
+    }
+
+    func testSpokenTitleStripsNameOnlyEmbeddedTitle() {
+        // Body embeds only the title name, without the leading chapter number.
+        let ct = ChapterText.withSpokenTitle(
+            index: 0, title: "1. A Painter Prince",
+            paragraphs: [para("A Painter Prince"), para("Body text here.")])
+        XCTAssertEqual(ct.paragraphs.map(\.text), ["1. A Painter Prince", "Body text here."])
+    }
+
+    func testSpokenTitleDoesNotOverStripPartialOverlap() {
+        // A body line that merely shares a word with the title must be kept.
+        let ct = ChapterText.withSpokenTitle(
+            index: 0, title: "A Painter Prince",
+            paragraphs: [para("A storm was coming."), para("More text.")])
+        XCTAssertEqual(ct.paragraphs.map(\.text),
+                       ["A Painter Prince", "A storm was coming.", "More text."])
+    }
+
+    func testSpokenTitleExactMatchNotDuplicated() {
+        let ct = ChapterText.withSpokenTitle(
+            index: 0, title: "Prologue", paragraphs: [para("Prologue"), para("It began...")])
+        XCTAssertEqual(ct.paragraphs.map(\.text), ["Prologue", "It began..."])
     }
 
     func testZipSlipEntrySkipped() throws {

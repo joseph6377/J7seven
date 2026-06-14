@@ -63,22 +63,79 @@ struct ChapterText: Codable, Identifiable {
     var id: Int { index }
 
     // Builds a chapter whose title is prepended as the first paragraph so TTS
-    // speaks the heading. Skips prepending when the title is blank or already
-    // matches the first paragraph, to avoid reading it twice.
+    // speaks the heading. First strips any leading body paragraphs that merely
+    // restate the title (books often embed the chapter number/name in the body,
+    // sometimes split across lines), then prepends a single clean title unless
+    // the remaining body already opens with it — so the title isn't shown or
+    // read twice.
     static func withSpokenTitle(index: Int, title: String, paragraphs: [Paragraph]) -> ChapterText {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else {
             return ChapterText(index: index, title: title, paragraphs: paragraphs)
         }
-        let firstMatchesTitle = paragraphs.first.map {
+
+        let body = stripRedundantTitle(from: paragraphs, title: trimmedTitle)
+
+        let firstMatchesTitle = body.first.map {
             $0.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 .caseInsensitiveCompare(trimmedTitle) == .orderedSame
         } ?? false
         guard !firstMatchesTitle else {
-            return ChapterText(index: index, title: title, paragraphs: paragraphs)
+            return ChapterText(index: index, title: title, paragraphs: body)
         }
-        let titleParagraph = Paragraph(text: trimmedTitle, pageNumber: paragraphs.first?.pageNumber)
-        return ChapterText(index: index, title: title, paragraphs: [titleParagraph] + paragraphs)
+        let titleParagraph = Paragraph(text: trimmedTitle, pageNumber: body.first?.pageNumber)
+        return ChapterText(index: index, title: title, paragraphs: [titleParagraph] + body)
+    }
+
+    /// Drops leading paragraphs that together reconstruct the chapter title.
+    /// Conservative: only strips when the consumed paragraphs *exactly* rebuild
+    /// the title's word tokens (optionally ignoring a leading chapter number),
+    /// never strips on a partial overlap, and never strips the body to empty.
+    private static func stripRedundantTitle(from paragraphs: [Paragraph], title: String) -> [Paragraph] {
+        let titleTokens = titleWordTokens(title)
+        guard !titleTokens.isEmpty else { return paragraphs }
+        // Variant with a leading number / "chapter" dropped, so a body that
+        // embeds only the title name (no number) still matches.
+        let coreTokens = droppingLeadingNumberTokens(titleTokens)
+
+        var acc: [String] = []
+        var consumed = 0
+        for (i, para) in paragraphs.enumerated() {
+            if i >= 4 { break }                       // only inspect the opening lines
+            let tokens = titleWordTokens(para.text)
+            if tokens.isEmpty { continue }            // ignore blank separators
+            let candidate = acc + tokens
+            if isPrefix(candidate, of: titleTokens) || isPrefix(candidate, of: coreTokens) {
+                acc = candidate
+                consumed = i + 1
+                if acc == titleTokens || acc == coreTokens { break }
+            } else {
+                break
+            }
+        }
+
+        guard consumed > 0, acc == titleTokens || acc == coreTokens else { return paragraphs }
+        let remaining = Array(paragraphs.dropFirst(consumed))
+        return remaining.isEmpty ? paragraphs : remaining
+    }
+
+    /// Lowercased alphanumeric word tokens, e.g. "1. A Painter Prince" → ["1","a","painter","prince"].
+    private static func titleWordTokens(_ s: String) -> [String] {
+        s.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+    }
+
+    private static func droppingLeadingNumberTokens(_ tokens: [String]) -> [String] {
+        var out = tokens
+        while let first = out.first, first == "chapter" || first.allSatisfy(\.isNumber) {
+            out.removeFirst()
+        }
+        return out
+    }
+
+    private static func isPrefix(_ candidate: [String], of tokens: [String]) -> Bool {
+        candidate.count <= tokens.count && Array(tokens.prefix(candidate.count)) == candidate
     }
 }
 

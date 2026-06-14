@@ -68,16 +68,25 @@ enum ChapterTextExtractor {
     }
 
     static func collectText(_ node: XMLIndexer) -> String {
-        var parts: [String] = []
-        let trimmed = node.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            let collapsed = trimmed.components(separatedBy: .whitespacesAndNewlines)
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
-            parts.append(collapsed)
+        // Concatenate text in document order with no inserted separators: inline
+        // children (drop-cap spans, <em>, <a>…) must join seamlessly with the
+        // surrounding text ("<span>I</span>n 1862" → "In 1862"), relying on the
+        // source's own whitespace. Then collapse whitespace runs to single spaces.
+        let raw = rawInOrder(node)
+        return raw.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private static func rawInOrder(_ node: XMLIndexer) -> String {
+        var out = ""
+        for item in node.orderedContent {
+            switch item {
+            case .text(let t):       out += t
+            case .element(let child): out += rawInOrder(child)
+            }
         }
-        for child in node.children { parts.append(collectText(child)) }
-        return parts.filter { !$0.isEmpty }.joined(separator: " ")
+        return out
     }
 
     // MARK: - Lenient pass (SwiftSoup)

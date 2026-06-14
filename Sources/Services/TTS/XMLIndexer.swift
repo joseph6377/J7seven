@@ -3,10 +3,20 @@ import Foundation
 /// Lightweight XML/XHTML tree built on Foundation's XMLParser.
 /// Covers the DOM-navigation subset used by EpubTextParser.
 final class XMLIndexer {
+    /// A text run or a child element, retained in document order so callers that
+    /// care about reading order (e.g. inline drop-cap spans) can reconstruct it.
+    enum Content {
+        case text(String)
+        case element(XMLIndexer)
+    }
+
     let name: String
     var text: String = ""
     let attributes: [String: String]
     var children: [XMLIndexer] = []
+    /// Text runs and child elements interleaved in document order. `text` and
+    /// `children` are kept alongside for navigation; this preserves ordering.
+    var orderedContent: [Content] = []
 
     /// False when XMLParser aborted before the end of the document — the tree may be
     /// partial/truncated and callers should fall back to a lenient HTML parser.
@@ -232,6 +242,7 @@ private final class ParseHandler: NSObject, XMLParserDelegate {
                 attributes attributeDict: [String: String] = [:]) {
         let node = XMLIndexer(name: qName ?? elementName, attributes: attributeDict)
         stack.last?.children.append(node)
+        stack.last?.orderedContent.append(.element(node))
         stack.append(node)
     }
 
@@ -244,9 +255,13 @@ private final class ParseHandler: NSObject, XMLParserDelegate {
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         stack.last?.text += string
+        stack.last?.orderedContent.append(.text(string))
     }
 
     func parser(_ parser: XMLParser, foundCDATA cdataBlock: Data) {
-        if let s = String(data: cdataBlock, encoding: .utf8) { stack.last?.text += s }
+        if let s = String(data: cdataBlock, encoding: .utf8) {
+            stack.last?.text += s
+            stack.last?.orderedContent.append(.text(s))
+        }
     }
 }
