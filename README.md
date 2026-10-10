@@ -45,6 +45,20 @@ xcodegen generate
 open BooksAppV2.xcodeproj
 ```
 
+### Headless build & test (no Xcode)
+
+The project can be built and tested entirely from the command line (see `CLAUDE.md`):
+
+```bash
+./scripts/build.sh                 # unsigned Simulator build — quick compile check
+./scripts/test.sh                  # run unit + UI tests on the iOS Simulator
+ONLY_UNIT=1 ./scripts/test.sh      # unit tests only (skips slower UI tests)
+```
+
+Both scripts run `xcodegen generate` first, so the `.xcodeproj` never drifts from
+`project.yml`. Requires [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+(`brew install xcodegen`).
+
 *On first launch, if voice assets are not pre-bundled in the application, you will be prompted to download the Supertonic 3 model (~400 MB). This download is securely stored inside the sandbox `Library/Caches/supertonic/` folder, ensuring compliance.*
 
 ---

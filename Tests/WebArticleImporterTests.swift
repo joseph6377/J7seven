@@ -117,7 +117,7 @@ final class WebArticleImporterTests: XCTestCase {
     func testTtsNormalization() {
         let urlText = "Visit https://google.com for info (https://yahoo.com)."
         let normalizedUrls = TtsTextNormalizer.normalizeURLs(urlText)
-        XCTAssertEqual(normalizedUrls, "Visit link to google.com for info .")
+        XCTAssertEqual(normalizedUrls, "Visit link to google.com for info.")
         
         let currencyText = "We raised $1.2M and spent $500K on the first $100."
         let normalizedCurrencies = TtsTextNormalizer.normalizeCurrencies(currencyText)
@@ -135,4 +135,40 @@ final class WebArticleImporterTests: XCTestCase {
         let cleanMarkdown = TtsTextNormalizer.stripMarkdown(markdownText)
         XCTAssertEqual(cleanMarkdown, "This has bold and italic and code with link.")
     }
+    
+    func testImageAltTextAndUrlPunctuationNormalization() {
+        // Test 1: Markdown image alt text should be completely stripped
+        let markdownWithImage = "Check this out: ![Illustration of a sunrise](https://example.com/sunrise.png) It looks amazing."
+        let normalized = TtsTextNormalizer.normalize(text: markdownWithImage)
+        XCTAssertFalse(normalized.contains("Illustration of a sunrise"))
+        XCTAssertFalse(normalized.contains("sunrise.png"))
+        XCTAssertTrue(normalized.contains("Check this out: It looks amazing.") || normalized.contains("Check this out:  It looks amazing."))
+        
+        // Test 2: URL with trailing punctuation maintains sentence punctuation
+        let urlSentence = "Read the docs at https://apple.com/swift. Then start coding."
+        let normalizedSentence = TtsTextNormalizer.normalize(text: urlSentence)
+        XCTAssertTrue(normalizedSentence.contains("link to apple.com."))
+        XCTAssertTrue(normalizedSentence.contains("Then start coding."))
+        
+        // Test 3: Standalone parenthesized URL doesn't leave stray dots/spaces
+        let parenUrl = "Read more (https://example.com/about). Next sentence."
+        let normalizedParen = TtsTextNormalizer.normalize(text: parenUrl)
+        XCTAssertEqual(normalizedParen, "Read more. Next sentence.")
+        
+        // Test 4: HTML <img> tag removal in JunkPatternStripper
+        let htmlWithImg = """
+        <div>
+            <p>First paragraph.</p>
+            <img src="https://example.com/pic.jpg" alt="A photo of mountains with snow">
+            <picture><img alt="Nested picture alt"></picture>
+            <p>Second paragraph following the image.</p>
+        </div>
+        """
+        let strippedHtml = (try? JunkPatternStripper.strip(html: htmlWithImg, keepCodeBlocks: false)) ?? ""
+        XCTAssertFalse(strippedHtml.contains("A photo of mountains with snow"))
+        XCTAssertFalse(strippedHtml.contains("Nested picture alt"))
+        XCTAssertTrue(strippedHtml.contains("First paragraph."))
+        XCTAssertTrue(strippedHtml.contains("Second paragraph following the image."))
+    }
 }
+

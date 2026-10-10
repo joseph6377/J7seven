@@ -148,7 +148,7 @@ enum EpubTextParser {
         }
 
         // 8. Spine → chapters of plain text
-        var chapters: [EpubChapter] = []
+        var rawChapters: [(title: String, paragraphs: [Paragraph])] = []
         if let spine = opf.child("spine") {
             for itemref in spine.children(named: "itemref") {
                 // linear="no" items are kept: excluding them drops real content
@@ -164,10 +164,20 @@ enum EpubTextParser {
                 guard !paragraphs.isEmpty else { continue }
 
                 let key     = normalize(base: opfRelDir, path: item.href)
-                let chTitle = tocTitles[key] ?? "Chapter \(chapters.count + 1)"
-                chapters.append(EpubChapter(title: chTitle, paragraphs: paragraphs))
+                let chTitle = tocTitles[key] ?? "Chapter \(rawChapters.count + 1)"
+                rawChapters.append((title: chTitle, paragraphs: paragraphs))
             }
         }
+
+        // 9. Sanitize citation/figure/soft-hyphen artifacts, gated on a quick
+        // language sample — no SavedDocument exists yet to read detectedLanguage from.
+        let language = DocumentArtifactSanitizer.quickDetectLanguage(
+            chapterParagraphs: rawChapters.map(\.paragraphs))
+        let chapters = rawChapters.map { raw in
+            EpubChapter(
+                title: raw.title,
+                paragraphs: DocumentArtifactSanitizer.sanitize(paragraphs: raw.paragraphs, language: language))
+        }.filter { !$0.paragraphs.isEmpty }
 
         guard !chapters.isEmpty else {
             // Books with an Adobe rights file but unencrypted-looking structure

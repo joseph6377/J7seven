@@ -30,10 +30,11 @@ final class LibraryService: @unchecked Sendable {
         
         // Dynamically sanitize paragraph texts to collapse newlines and redundant spaces
         let sanitizedChapters = doc.chapters.map { chapter in
-            let sanitizedParagraphs = chapter.paragraphs.map { para in
+            let sanitizedParagraphs = chapter.paragraphs.compactMap { para -> Paragraph? in
                 let sanitizedText = para.text.components(separatedBy: .whitespacesAndNewlines)
                     .filter { !$0.isEmpty }
                     .joined(separator: " ")
+                guard !sanitizedText.isEmpty else { return nil }
                 return Paragraph(text: sanitizedText, pageNumber: para.pageNumber)
             }
             return ChapterText(index: chapter.index, title: chapter.title, paragraphs: sanitizedParagraphs)

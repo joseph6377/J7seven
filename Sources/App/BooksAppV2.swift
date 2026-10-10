@@ -17,7 +17,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 @main
 struct BooksAppV2: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var appState = AppState()
+    @State private var appState = AppState.shared
 
     var body: some Scene {
         WindowGroup {

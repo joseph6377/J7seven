@@ -14,12 +14,6 @@ final class PlayerService {
     var playbackRate: Float = 1.0
     private var wasPlayingBeforeInterruption = false
 
-    private let nowPlayingQueue = DispatchQueue(label: "in.josepht.BooksApp.NowPlaying")
-    
-    // WORKAROUND: Dummy player and session to bypass iOS 26 MPNowPlayingSession workaround / MPNowPlayingInfoCenter.default() crash
-    private let dummyPlayer = AVPlayer()
-    private var nowPlayingSession: MPNowPlayingSession?
-
     var onRemotePlay:                   (@MainActor () -> Void)?
     var onRemotePause:                  (@MainActor () -> Void)?
     var onRemoteSkipForward:            (@MainActor (Double) -> Void)?
@@ -29,7 +23,7 @@ final class PlayerService {
     init() {
         setupEngine()
         setupAudioSession()
-        setupNowPlayingSession()
+        setupRemoteCommands(commandCenter: MPRemoteCommandCenter.shared())
     }
 
     private func setupEngine() {
@@ -44,18 +38,6 @@ final class PlayerService {
         engine.prepare()
     }
     
-    private func setupNowPlayingSession() {
-        if #available(iOS 16.0, *) {
-            // Provide the idle AVPlayer to initialize the isolated session successfully
-            let session = MPNowPlayingSession(players: [dummyPlayer])
-            self.nowPlayingSession = session
-            setupRemoteCommands(commandCenter: session.remoteCommandCenter)
-        } else {
-            // Fallback for older iOS versions
-            setupRemoteCommands(commandCenter: MPRemoteCommandCenter.shared())
-        }
-    }
-
     func schedule(_ buffer: AVAudioPCMBuffer, id: String, completion: @escaping @Sendable (String) -> Void) {
         hasAudioData = true
         playerNode.scheduleBuffer(buffer, at: nil, options: [], completionHandler: {
@@ -63,6 +45,21 @@ final class PlayerService {
                 completion(id)
             }
         })
+        
+        // If the player is in the playing state but playerNode has run dry/stopped
+        // (e.g., lookahead synthesis took a moment), automatically restart playerNode to resume seamless playback
+        if isPlaying && !playerNode.isPlaying {
+            if !engine.isRunning {
+                do {
+                    try engine.start()
+                } catch {
+                    print("[Player] Audio engine failed to resume in schedule: \(error)")
+                }
+            }
+            if engine.isRunning {
+                playerNode.play()
+            }
+        }
     }
 
     func play() {
@@ -104,14 +101,7 @@ final class PlayerService {
         isPlaying = false
         hasAudioData = false
 
-        let session = self.nowPlayingSession
-        nowPlayingQueue.async {
-            if #available(iOS 16.0, *), let session = session {
-                session.nowPlayingInfoCenter.nowPlayingInfo = nil
-            } else {
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-            }
-        }
+        nowPlayingInfoCenter.nowPlayingInfo = nil
 
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -221,35 +211,51 @@ final class PlayerService {
     ) {
         let playing = isPlaying ?? self.isPlaying
         let rate = self.playbackRate
-        let session = self.nowPlayingSession
 
-        nowPlayingQueue.async {
-            let infoCenter: MPNowPlayingInfoCenter
-            if #available(iOS 16.0, *), let session = session {
-                infoCenter = session.nowPlayingInfoCenter
-            } else {
-                infoCenter = MPNowPlayingInfoCenter.default()
-            }
-            
-            var info = infoCenter.nowPlayingInfo ?? [:]
-            if let title { info[MPMediaItemPropertyTitle] = title }
-            if let author { info[MPMediaItemPropertyArtist] = author }
-            if let cover, let image = UIImage(data: cover) {
-                info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-            }
-            if let duration {
-                info[MPMediaItemPropertyPlaybackDuration] = duration
-            }
-            if let elapsedTime {
-                info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsedTime
-            }
-            
-            // This is the sole controller of the Lock Screen Play/Pause icon UI. 
-            info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? Double(rate) : 0.0
-            
-            infoCenter.nowPlayingInfo = info
-            
-            // Explicitly REMOVED `.playbackState` to prevent background UI desyncs caused by missing entitlements.
+        let infoCenter = nowPlayingInfoCenter
+        var info = infoCenter.nowPlayingInfo ?? [:]
+        if let title { info[MPMediaItemPropertyTitle] = title }
+        if let author { info[MPMediaItemPropertyArtist] = author }
+        if let cover, let artwork = Self.makeArtwork(from: cover) {
+            info[MPMediaItemPropertyArtwork] = artwork
         }
+        if let duration {
+            info[MPMediaItemPropertyPlaybackDuration] = duration
+        }
+        if let elapsedTime {
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsedTime
+        }
+
+        // Drives the Lock Screen scrubber and the CarPlay elapsed-time extrapolation.
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? Double(rate) : 0.0
+
+        infoCenter.nowPlayingInfo = info
+
+        // CarPlay's Now Playing template draws its play/pause glyph from `playbackState`
+        // (an explicit enum), NOT from the inferred playback rate — without this the
+        // CarPlay button stays stale (shows Play while audio plays) even though the
+        // scrubber advances correctly. This is public API for the app's OWN now-playing
+        // info and needs no entitlement (`com.apple.mediaremote.set-playback-state` is
+        // only for controlling *other* apps, which we never do).
+        infoCenter.playbackState = playing ? .playing : .paused
+    }
+
+    // NOTE: The historical iOS 26 "MPNowPlayingInfoCenter crash" was NOT in the default
+    // center itself — it was the actor-isolated artwork handler (see makeArtwork below).
+    // The MPNowPlayingSession(players: [dummyPlayer]) workaround has been removed because
+    // a session bound to a never-playing AVPlayer makes CarPlay report a paused state
+    // regardless of the published playback rate.
+    private var nowPlayingInfoCenter: MPNowPlayingInfoCenter {
+        MPNowPlayingInfoCenter.default()
+    }
+
+    // MediaPlayer invokes the artwork handler lazily on its own internal queue. The
+    // handler must therefore carry NO actor isolation: an inline closure formed in a
+    // @MainActor method gets stamped @MainActor, and the runtime isolation check traps
+    // (_dispatch_assert_queue_fail) inside -[MPMediaItemArtwork jpegDataWithSize:] on
+    // iOS 26. Building it in a nonisolated context keeps the handler isolation-free.
+    nonisolated private static func makeArtwork(from data: Data) -> MPMediaItemArtwork? {
+        guard let image = UIImage(data: data) else { return nil }
+        return MPMediaItemArtwork(boundsSize: image.size) { _ in image }
     }
 }

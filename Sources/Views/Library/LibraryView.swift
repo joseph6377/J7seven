@@ -1552,6 +1552,11 @@ struct URLImportProgressView: View {
         guard !hasStarted else { return }
         hasStarted = true
         
+        if appState.selectedEngine == .supertonic,
+           case .notDownloaded = appState.supertonicSynthesizer.modelState {
+            appState.supertonicSynthesizer.startDownload()
+        }
+        
         importTask = Task {
             do {
                 var htmlContent: String? = nil

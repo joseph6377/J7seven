@@ -147,6 +147,16 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
             }
 
             var text = chapter.paragraphs[synthCursor.paragraphIndex].text
+            let trimmedCheck = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedCheck.isEmpty {
+                synthCursor.paragraphIndex += 1
+                synthCursor.characterOffset = 0
+                if synthCursor.paragraphIndex >= chapter.paragraphs.count {
+                    synthCursor.chapterIndex += 1
+                    synthCursor.paragraphIndex = 0
+                }
+                continue
+            }
             var sliceOffset = 0
             
             if scheduledCount == 0 && pendingCharacterOffset > 0 {
@@ -161,6 +171,10 @@ final class AppleVoiceScheduler: NSObject, PlaybackScheduler {
             let utterance = AVSpeechUtterance(string: text)
             utterance.voice = avVoice
             utterance.rate = rate
+            // A beat between paragraphs, a longer beat between chapters — Apple
+            // already paces pauses within a paragraph itself, one utterance per paragraph.
+            let isLastParagraphInChapter = synthCursor.paragraphIndex + 1 >= chapter.paragraphs.count
+            utterance.postUtteranceDelay = isLastParagraphInChapter ? 0.4 : 0.15
 
             let utteranceId = ObjectIdentifier(utterance)
             utteranceSliceOffsetMap[utteranceId] = sliceOffset
@@ -230,6 +244,10 @@ extension AppleVoiceScheduler: AVSpeechSynthesizerDelegate {
             guard let self else { return }
             self.utteranceCursorMap.removeValue(forKey: id)
             self.utteranceSliceOffsetMap.removeValue(forKey: id)
+            self.scheduledCount = max(0, self.scheduledCount - 1)
+            if self.isPlaying {
+                self.enqueueNextParagraphs()
+            }
         }
     }
 

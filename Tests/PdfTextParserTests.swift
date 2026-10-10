@@ -134,4 +134,42 @@ final class PdfTextParserTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Dehyphenation at line-join seams
+
+    func testHyphenatedWordFusedAcrossLineWrap() async throws {
+        // Same column, small vertical gap: geometric extractor treats these as one
+        // continued paragraph, not two. "hyphen-" + "ated" should fuse to "hyphenated".
+        let pdfURL = createTestPDF(pages: [
+            (
+                rects: [
+                    CGRect(x: 50, y: 100, width: 300, height: 20),
+                    CGRect(x: 50, y: 130, width: 300, height: 20),
+                ],
+                strings: [
+                    "This is a hyphen-",
+                    "ated compound word.",
+                ]
+            )
+        ])
+        let parsed = try await PdfTextParser.parse(pdfURL: pdfURL)
+        XCTAssertEqual(parsed.chapters[0].paragraphs[0].text, "This is a hyphenated compound word.")
+    }
+
+    func testCapitalizedContinuationKeepsHyphenWithoutSpace() async throws {
+        let pdfURL = createTestPDF(pages: [
+            (
+                rects: [
+                    CGRect(x: 50, y: 100, width: 300, height: 20),
+                    CGRect(x: 50, y: 130, width: 300, height: 20),
+                ],
+                strings: [
+                    "The person named Jean-",
+                    "Claude arrived.",
+                ]
+            )
+        ])
+        let parsed = try await PdfTextParser.parse(pdfURL: pdfURL)
+        XCTAssertEqual(parsed.chapters[0].paragraphs[0].text, "The person named Jean-Claude arrived.")
+    }
 }

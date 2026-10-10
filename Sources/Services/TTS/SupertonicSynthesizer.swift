@@ -36,6 +36,14 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
     private var backgroundSession: URLSession!
     private var taskProgressBytes: [String: Int64] = [:]
 
+    // Dedicated serial queue for blocking ONNX Runtime calls (model load, voice style
+    // load, per-chunk inference). Keeping these off DispatchQueue.global() avoids
+    // piling concurrent blocking native calls onto the same pool the Swift Concurrency
+    // cooperative executor draws from, which showed up as thread-pool contention
+    // (an "unsafeForcedSync" runtime warning followed by a watchdog kill) when model
+    // loading and a synthesis attempt landed at the same time during app launch.
+    private nonisolated(unsafe) let inferenceQueue = DispatchQueue(label: "in.josepht.booksappv2.supertonic.inference", qos: .userInitiated)
+
     override init() {
         super.init()
         let config = URLSessionConfiguration.background(withIdentifier: "in.josepht.booksappv2.modeldownload")
@@ -46,8 +54,18 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
 
     private nonisolated var modelDirectory: URL {
         FileManager.default
-            .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Models/supertonic", isDirectory: true)
+    }
+
+    /// iOS may purge Library/Caches at any time (low storage, or after days of disuse), which
+    /// silently deleted the ~400 MB model. Application Support is never purged by the system;
+    /// the model is re-downloadable, so exclude it from iCloud/device backups.
+    private nonisolated func excludeModelsFromBackup() {
+        var root = modelDirectory.deletingLastPathComponent()
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? root.setResourceValues(values)
     }
 
     /// Resolves the actual directory path or file URL where a model asset is located,
@@ -119,40 +137,34 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
 
     private func migrateOldModelsIfNeeded() {
         let fm = FileManager.default
-        let oldModelDirectory = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Models/supertonic", isDirectory: true)
-        
-        let oldSentinel = oldModelDirectory.appendingPathComponent("onnx/vocoder.onnx")
-        let newSentinel = modelDirectory.appendingPathComponent("onnx/vocoder.onnx")
-        
-        if fm.fileExists(atPath: oldSentinel.path) {
-            if !fm.fileExists(atPath: newSentinel.path) {
-                print("[SupertonicSynthesizer] Found voice models in old Documents folder. Migrating to Caches directory...")
+        let legacyDirs = [
+            fm.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Models/supertonic", isDirectory: true),
+            fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Models/supertonic", isDirectory: true),
+        ]
+        let sentinel = "onnx/vocoder.onnx"
+        let newSentinel = modelDirectory.appendingPathComponent(sentinel)
+
+        for old in legacyDirs where fm.fileExists(atPath: old.path) {
+            if !fm.fileExists(atPath: newSentinel.path),
+               fm.fileExists(atPath: old.appendingPathComponent(sentinel).path) {
+                print("[SupertonicSynthesizer] Migrating voice models from \(old.path) to Application Support...")
                 do {
                     try fm.createDirectory(at: modelDirectory.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    
                     if fm.fileExists(atPath: modelDirectory.path) {
                         try fm.removeItem(at: modelDirectory)
                     }
-                    
-                    try fm.moveItem(at: oldModelDirectory, to: modelDirectory)
-                    print("[SupertonicSynthesizer] Successfully migrated models to Caches folder.")
+                    try fm.moveItem(at: old, to: modelDirectory)
+                    continue
                 } catch {
                     print("[SupertonicSynthesizer] Error migrating old models: \(error)")
                 }
-            } else {
-                print("[SupertonicSynthesizer] Models already migrated to Caches. Cleaning up old Documents/Models directory...")
             }
-            
-            if fm.fileExists(atPath: oldModelDirectory.path) {
-                do {
-                    try fm.removeItem(at: oldModelDirectory)
-                    print("[SupertonicSynthesizer] Cleaned up old models directory in Documents.")
-                } catch {
-                    print("[SupertonicSynthesizer] Error cleaning up old models directory: \(error)")
-                }
-            }
+            try? fm.removeItem(at: old)
         }
+        try? fm.createDirectory(at: modelDirectory.deletingLastPathComponent(), withIntermediateDirectories: true)
+        excludeModelsFromBackup()
     }
 
     func checkAndPrepare() {
@@ -269,11 +281,9 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
         let onnxDirURL = resolvePath(for: "onnx")
         let onnxDir = onnxDirURL.path
         
-        // ORTEnv and TextToSpeech creation can be slow and use sync primitives.
-        // Run it on a dedicated Grand Central Dispatch thread instead of the Swift Concurrency cooperative thread pool
-        // to prevent "unsafeForcedSync" runtime warnings and Cooperative Thread Pool starvation.
+        // ORTEnv and TextToSpeech creation can be slow and use sync primitives; run on inferenceQueue.
         let result = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
+            inferenceQueue.async {
                 do {
                     let env = try ORTEnv(loggingLevel: .warning)
                     let loadedTTS = try loadTextToSpeech(onnxDir, false, env)
@@ -297,12 +307,22 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
 
     // MARK: - Synthesizer Protocol
 
-    func synthesize(_ text: String, voice: TTSVoice, options: SynthOptions) -> AsyncThrowingStream<PCMChunk, Error> {
-        // Capture needed state to avoid accessing main actor properties from background
-        guard let tts = self.tts else {
-            return AsyncThrowingStream { $0.finish(throwing: NSError(domain: "SupertonicSynthesizer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Model not loaded"])) }
+    /// Polls until the model finishes loading rather than failing instantly, so playback
+    /// requested right at app launch (before `loadModel()` completes) doesn't race the
+    /// model and get cancelled outright. Only gives up on a real error state or a timeout.
+    private func waitForReadyModel() async throws -> TextToSpeech {
+        for _ in 0..<150 { // ~30s at 200ms
+            try Task.checkCancellation()
+            if let tts = self.tts { return tts }
+            if case .error(let message) = self.modelState {
+                throw NSError(domain: "SupertonicSynthesizer", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
         }
-        
+        throw NSError(domain: "SupertonicSynthesizer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Model not loaded"])
+    }
+
+    func synthesize(_ text: String, voice: TTSVoice, options: SynthOptions) -> AsyncThrowingStream<PCMChunk, Error> {
         let baseVoiceId = voice.id.components(separatedBy: "-").first ?? voice.id
         let resolvedVoiceStylePath: String
         let styleFile = "voice_styles/\(baseVoiceId).json"
@@ -324,8 +344,11 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
         return AsyncThrowingStream { continuation in
             let task = Task.detached(priority: .userInitiated) { [weak self] in
                 do {
+                    guard let self else { throw CancellationError() }
+                    let tts = try await self.waitForReadyModel()
+
                     let style = try await withCheckedThrowingContinuation { continuation in
-                        DispatchQueue.global(qos: .userInitiated).async {
+                        inferenceQueue.async {
                             do {
                                 let loadedStyle = try loadVoiceStyle([resolvedVoiceStylePath], verbose: false)
                                 continuation.resume(returning: loadedStyle)
@@ -334,17 +357,17 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
                             }
                         }
                     }
-                    
+
                     let maxLen = (language == "ko" || language == "ja") ? 120 : 300
                     let chunks = chunkText(text, maxLen: maxLen)
 
                     for (i, chunkText) in chunks.enumerated() {
                         if Task.isCancelled { break }
-                        
+
                         let start = Date()
                         // Synchronous blocking call to ONNX Runtime offloaded to GCD to prevent blocking cooperative pool
                         let result = try await withCheckedThrowingContinuation { continuation in
-                            DispatchQueue.global(qos: .userInitiated).async {
+                            inferenceQueue.async {
                                 do {
                                     let callResult = try tts.call(
                                         chunkText, language, style,
@@ -362,11 +385,9 @@ final class SupertonicSynthesizer: NSObject, Synthesizer {
                         let audioDuration = Double(result.duration)
                         let factor = audioDuration / max(Date().timeIntervalSince(start), 0.001)
                         
-                        if let self = self {
-                            // Update UI properties on main actor
-                            await MainActor.run {
-                                self.realtimeFactor = factor
-                            }
+                        // Update UI properties on main actor
+                        await MainActor.run {
+                            self.realtimeFactor = factor
                         }
 
                         let isFinal = i == chunks.count - 1

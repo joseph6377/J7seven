@@ -288,6 +288,12 @@ struct JunkPatternStripper {
             try p.text(text)
             try fig.replaceWith(p)
         }
+        
+        // Strip images, pictures, and SVGs so no alt text or image artifacts leak into TTS paragraphs
+        let images = try doc.select("img, picture, svg")
+        for img in images {
+            try? img.remove()
+        }
     }
     
     private static func processFootnotes(_ doc: Document) throws {

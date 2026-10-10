@@ -168,6 +168,16 @@ final class SynthScheduler: PlaybackScheduler {
             }
 
             var text = chapter.paragraphs[synthCursor.paragraphIndex].text
+            let trimmedCheck = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedCheck.isEmpty {
+                synthCursor.paragraphIndex += 1
+                synthCursor.characterOffset = 0
+                if synthCursor.paragraphIndex >= chapter.paragraphs.count {
+                    synthCursor.chapterIndex += 1
+                    synthCursor.paragraphIndex = 0
+                }
+                continue
+            }
             var trimOffset = 0
             if scheduledCount == 0 && synthCursor.characterOffset > 0 {
                 if synthCursor.characterOffset < text.utf16.count {
@@ -254,6 +264,19 @@ final class SynthScheduler: PlaybackScheduler {
                 break
             }
 
+            // Extra silence at paragraph/chapter boundaries, on top of the 0.05s
+            // per-chunk crossfade above: a beat between paragraphs, a longer beat
+            // between chapters. Scheduled standalone (not tracked in scheduledQueue),
+            // so it never touches the cursor/highlighting logic in setActiveSentence.
+            if !Task.isCancelled {
+                let isLastParagraphInChapter = currentLoopCursor.paragraphIndex + 1 >= chapter.paragraphs.count
+                let extraPause = isLastParagraphInChapter ? 0.35 : 0.10
+                if let silence = makeSilenceBuffer(seconds: extraPause) {
+                    let silenceId = "silence-\(currentLoopCursor.chapterIndex):\(currentLoopCursor.paragraphIndex)"
+                    player.schedule(silence, id: silenceId) { _ in }
+                }
+            }
+
             synthCursor.paragraphIndex += 1
             synthCursor.characterOffset = 0
             if synthCursor.paragraphIndex >= chapter.paragraphs.count {
@@ -270,8 +293,8 @@ final class SynthScheduler: PlaybackScheduler {
     private func handleSentenceFinished(id: String, sessionId: Int) {
         guard isPlaying, sessionId == playbackSessionId else { return }
         
-        if !scheduledQueue.isEmpty && scheduledQueue[0].id == id {
-            scheduledQueue.removeFirst()
+        if let idx = scheduledQueue.firstIndex(where: { $0.id == id }) {
+            scheduledQueue.removeSubrange(0...idx)
         }
         
         if let nextSentence = scheduledQueue.first {
@@ -403,5 +426,11 @@ final class SynthScheduler: PlaybackScheduler {
             }
         }
         return buffer
+    }
+
+    private func makeSilenceBuffer(seconds: Double) -> AVAudioPCMBuffer? {
+        let sampleCount = Int(seconds * 44100)
+        guard sampleCount > 0 else { return nil }
+        return makePCMBuffer(from: [Float](repeating: 0, count: sampleCount))
     }
 }

@@ -104,7 +104,7 @@ enum PdfReadingOrderExtractor {
                     paragraphs.append(currentParagraph)
                     currentParagraph = text
                 } else {
-                    currentParagraph += " " + text
+                    currentParagraph = fuseHyphenatedLineBreak(currentParagraph, text)
                 }
             }
         }
@@ -116,6 +116,26 @@ enum PdfReadingOrderExtractor {
         return paragraphs
     }
     
+    /// Fuses a word broken by a justified-text line wrap ("informa-" + "tion" ->
+    /// "information"). Only fires when the hyphen directly follows a letter (no
+    /// space, ruling out a spaced dash used as punctuation). A capitalized
+    /// continuation (e.g. "Jean-" + "Claude") more likely means a real
+    /// hyphenated compound, so the hyphen is kept — but still joined with no
+    /// space, since the hyphen is already the connector ("Jean-Claude", not
+    /// "Jean- Claude").
+    private static func fuseHyphenatedLineBreak(_ current: String, _ next: String) -> String {
+        guard let lastChar = current.last, lastChar == "-",
+              let secondLastChar = current.dropLast().last, secondLastChar.isLetter,
+              let firstChar = next.first, firstChar.isLetter
+        else {
+            return current + " " + next
+        }
+        if firstChar.isLowercase {
+            return String(current.dropLast()) + next
+        }
+        return current + next
+    }
+
     private static func endsWithSentenceTerminator(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let lastChar = trimmed.last else { return false }

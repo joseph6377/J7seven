@@ -3,6 +3,7 @@ import SwiftUI
 @Observable
 @MainActor
 final class AppState {
+    static let shared = AppState()
     static let activeBookIdKey = "session.activeBookId"
 
     let libraryService:        LibraryService

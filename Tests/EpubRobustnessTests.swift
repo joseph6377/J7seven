@@ -393,4 +393,46 @@ final class EpubRobustnessTests: XCTestCase {
             atPath: out.deletingLastPathComponent().appendingPathComponent("evil.txt").path),
             "../ traversal must be blocked")
     }
+
+    // MARK: - Structural artifact excision (footnotes, pagebreaks, noterefs)
+
+    func testEpubTypeNoterefAnchorExcised() throws {
+        let body = "<p>Some text<a epub:type=\"noteref\" href=\"#fn1\">1</a> continues here.</p>"
+        let book = try parse(singleChapterBook(body: body))
+        XCTAssertEqual(book.chapters[0].paragraphs.map(\.text), ["Some text continues here."])
+    }
+
+    func testDocPagebreakRoleExcisedRegardlessOfText() throws {
+        // "always excise" roles drop their text even when it isn't marker-shaped.
+        let body = "<p>Page one text.<span role=\"doc-pagebreak\">PAGE BREAK MARKER</span></p>"
+        let book = try parse(singleChapterBook(body: body))
+        XCTAssertEqual(book.chapters[0].paragraphs.map(\.text), ["Page one text."])
+    }
+
+    func testLegacyAnchorFootnoteRefExcised() throws {
+        let body = "<p>Reference<a href=\"#fn1\">1</a> noted.</p>"
+        let book = try parse(singleChapterBook(body: body))
+        XCTAssertEqual(book.chapters[0].paragraphs.map(\.text), ["Reference noted."])
+    }
+
+    func testFootnoteAsideContainerFullyExcised() throws {
+        let body = """
+        <p>Main text.</p>
+        <aside epub:type="footnote"><p>1. This is a footnote body.</p></aside>
+        """
+        let book = try parse(singleChapterBook(body: body))
+        XCTAssertEqual(book.chapters[0].paragraphs.map(\.text), ["Main text."])
+    }
+
+    func testGlossrefWrappingRealWordPreserved() throws {
+        let body = "<p>The <a epub:type=\"glossref\" href=\"#gloss-x\">mitochondria</a> is important.</p>"
+        let book = try parse(singleChapterBook(body: body))
+        XCTAssertEqual(book.chapters[0].paragraphs.map(\.text), ["The mitochondria is important."])
+    }
+
+    func testGlossrefWrappingBareMarkerExcised() throws {
+        let body = "<p>See note<a epub:type=\"glossref\" href=\"#gloss-1\">12</a> for details.</p>"
+        let book = try parse(singleChapterBook(body: body))
+        XCTAssertEqual(book.chapters[0].paragraphs.map(\.text), ["See note for details."])
+    }
 }

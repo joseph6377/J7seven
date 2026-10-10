@@ -135,10 +135,17 @@ enum PdfTextParser {
             await Task.yield() // Keep UI responsive between page parses
         }
         
+        // 6. Sanitize citation/figure/soft-hyphen artifacts, gated on a quick
+        // language sample — no SavedDocument exists yet to read detectedLanguage from.
+        let language = DocumentArtifactSanitizer.quickDetectLanguage(
+            chapterParagraphs: accumulators.map(\.paragraphs))
+
         // Filter out any chapters that contain no parsed paragraphs
         let finalChapters = accumulators.filter { !$0.paragraphs.isEmpty }.map { acc in
-            PdfChapter(title: acc.title, paragraphs: acc.paragraphs)
-        }
+            PdfChapter(
+                title: acc.title,
+                paragraphs: DocumentArtifactSanitizer.sanitize(paragraphs: acc.paragraphs, language: language))
+        }.filter { !$0.paragraphs.isEmpty }
         
         guard !finalChapters.isEmpty else {
             throw PdfTextParserError.emptyPDF

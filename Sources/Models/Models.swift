@@ -178,6 +178,18 @@ struct LibraryEntry: Codable, Identifiable, Hashable {
 }
 
 extension LibraryEntry {
+    /// True when `other` looks like a re-import of the same document: same title, author,
+    /// format and word count (case/whitespace-insensitive on the text fields).
+    func isSameBook(as other: LibraryEntry) -> Bool {
+        func norm(_ s: String?) -> String {
+            (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        return norm(title) == norm(other.title)
+            && norm(author) == norm(other.author)
+            && format == other.format
+            && wordCount == other.wordCount
+    }
+
     init(from doc: SavedDocument) {
         id = doc.id
         title = doc.title

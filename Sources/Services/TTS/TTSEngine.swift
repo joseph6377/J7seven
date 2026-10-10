@@ -31,9 +31,8 @@ enum AppleVoiceMapper {
         let all = AVSpeechSynthesisVoice.speechVoices()
 
         let english = all.filter {
-            ($0.language.hasPrefix("en-US") || $0.language.hasPrefix("en-GB") ||
-             $0.language.hasPrefix("en-AU"))
-            && ($0.quality == .premium || $0.quality == .enhanced)
+            $0.language.hasPrefix("en-US") || $0.language.hasPrefix("en-GB") ||
+            $0.language.hasPrefix("en-AU")
         }
 
         let sorted = english.sorted {

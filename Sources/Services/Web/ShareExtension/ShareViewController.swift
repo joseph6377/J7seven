@@ -153,7 +153,44 @@ final class ShareViewController: UIViewController {
         }
     }
     
+    /// Apps such as Apple Books hand over the book as a file representation (sometimes raw data,
+    /// sometimes under a vendor type conforming to EPUB) rather than a URL/string. Ask for the file
+    /// itself first; `loadFileRepresentation` copes with all of those. Falls back to the URL path.
     nonisolated static private func extractDocumentsOrURL(from provider: NSItemProvider, completion: @escaping @Sendable (Result<SharedPayload, Error>) -> Void) {
+        let docType = provider.registeredTypeIdentifiers.first { id in
+            guard let type = UTType(id) else { return false }
+            return type.conforms(to: .epub) || type.conforms(to: .pdf)
+        }
+        guard let docType else {
+            extractDocumentsOrURLLegacy(from: provider, completion: completion)
+            return
+        }
+
+        let suggestedName = provider.suggestedName
+        let ext = UTType(docType)?.preferredFilenameExtension ?? (UTType(docType)?.conforms(to: .pdf) == true ? "pdf" : "epub")
+        let fallback = SendableItemProvider(provider: provider)
+        provider.loadFileRepresentation(forTypeIdentifier: docType) { url, error in
+            guard let url else {
+                logDebug("loadFileRepresentation(\(docType)) failed: \(String(describing: error))")
+                extractDocumentsOrURLLegacy(from: fallback.provider, completion: completion)
+                return
+            }
+            // `url` is only valid inside this callback, so copy it out immediately.
+            var name = suggestedName ?? url.deletingPathExtension().lastPathComponent
+            if URL(fileURLWithPath: name).pathExtension.lowercased() != ext.lowercased() {
+                name += ".\(ext)"
+            }
+            do {
+                let shared = try copyFileToSharedContainer(from: url, named: name)
+                completion(.success(SharedPayload(url: shared, title: name, renderedHtml: nil, jsonLd: nil)))
+            } catch {
+                logDebug("copy of shared document failed: \(error)")
+                completion(.failure(error))
+            }
+        }
+    }
+
+    nonisolated static private func extractDocumentsOrURLLegacy(from provider: NSItemProvider, completion: @escaping @Sendable (Result<SharedPayload, Error>) -> Void) {
         let pdfType = UTType.pdf.identifier
         let epubType = UTType.epub.identifier
         let fileURLType = UTType.fileURL.identifier
@@ -180,6 +217,15 @@ final class ShareViewController: UIViewController {
             var parsedPayload: SharedPayload? = nil
             var urlValue: URL? = nil
             
+            if let data = item as? Data {
+                // Raw bytes (no file on disk): only meaningful for documents, so write them out.
+                let ext = hasPDF ? "pdf" : "epub"
+                let name = (provider.suggestedName ?? "Shared Book") + ".\(ext)"
+                if let tmp = try? ShareViewController.copyDataToSharedContainer(data, named: name) {
+                    completion(.success(SharedPayload(url: tmp, title: name, renderedHtml: nil, jsonLd: nil)))
+                    return
+                }
+            }
             if let url = item as? URL {
                 urlValue = url
             } else if let urlString = item as? String {
@@ -237,7 +283,7 @@ final class ShareViewController: UIViewController {
         }
     }
     
-    nonisolated static private func copyFileToSharedContainer(from sourceURL: URL) throws -> URL {
+    nonisolated static private func copyFileToSharedContainer(from sourceURL: URL, named name: String? = nil) throws -> URL {
         guard let sharedContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.in.josepht.booksappv2") else {
             throw ShareError.unsupportedPayload
         }
@@ -245,7 +291,7 @@ final class ShareViewController: UIViewController {
         let destinationDirectory = sharedContainer.appendingPathComponent("SharedFiles", isDirectory: true)
         try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
         
-        let fileName = sourceURL.lastPathComponent
+        let fileName = name ?? sourceURL.lastPathComponent
         let destinationURL = destinationDirectory.appendingPathComponent(fileName)
         
         if FileManager.default.fileExists(atPath: destinationURL.path) {
@@ -256,6 +302,18 @@ final class ShareViewController: UIViewController {
         return destinationURL
     }
     
+    nonisolated static private func copyDataToSharedContainer(_ data: Data, named name: String) throws -> URL {
+        guard let sharedContainer = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.in.josepht.booksappv2") else {
+            throw ShareError.unsupportedPayload
+        }
+        let dir = sharedContainer.appendingPathComponent("SharedFiles", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dest = dir.appendingPathComponent(name)
+        try? FileManager.default.removeItem(at: dest)
+        try data.write(to: dest)
+        return dest
+    }
+
     nonisolated static private func extractURL(from text: String) -> URL? {
         if let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)), url.scheme != nil {
             return url
@@ -421,7 +479,15 @@ final class ShareViewController: UIViewController {
     private func complete(error: ShareError) {
         ShareViewController.logDebug("complete triggered with error: \(error)")
         activityIndicator.stopAnimating()
-        extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+        let alert = UIAlertController(
+            title: "Can't open in LysnBox",
+            message: "LysnBox couldn't read this item. Only DRM-free EPUB and PDF files, web pages and links are supported.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+            self?.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+        })
+        present(alert, animated: true)
     }
     
     nonisolated static private func logDebug(_ message: String) {

@@ -22,22 +22,23 @@ struct TtsTextNormalizer {
     static func normalize(text: String) -> String {
         var result = text
         
-        // 1. Normalize URLs
+        // 1. Markdown leftovers & image stripping (must run before normalizeURLs so that
+        // markdown images and link syntax are handled before parenthesized URLs)
+        result = stripMarkdown(result)
+        
+        // 2. Normalize URLs
         result = normalizeURLs(result)
         
-        // 2. Abbreviation lexicon (bundled + user extensible)
+        // 3. Abbreviation lexicon (bundled + user extensible)
         let bundleLexicon = loadBundledLexicon()
         result = normalizeAbbreviations(result, bundleLexicon: bundleLexicon)
         
-        // 3. Acronym/Initialism spelling
+        // 4. Acronym/Initialism spelling
         result = formatInitialisms(result)
         
-        // 4. Currency and numbers
+        // 5. Currency and numbers
         result = normalizeCurrencies(result)
         result = normalizeDates(result)
-        
-        // 5. Markdown leftovers
-        result = stripMarkdown(result)
         
         return result
     }
@@ -57,21 +58,36 @@ struct TtsTextNormalizer {
             }
         }
         
-        // Standalone URL: link to {host}
+        // Standalone URL: link to {host}, preserving any trailing sentence punctuation
         let urlPattern = "https?://(\\S+)"
         if let regex = try? NSRegularExpression(pattern: urlPattern) {
             let nsString = result as NSString
             let matches = regex.matches(in: result, range: NSRange(location: 0, length: nsString.length))
+            let trailingPunctuationChars = CharacterSet(charactersIn: ".,;:!?)\"'>")
+            
             for match in matches.reversed() {
                 let fullUrlString = nsString.substring(with: match.range)
-                if let url = URL(string: fullUrlString), let host = url.host {
-                    let replaced = "link to \(host)"
+                var cleanUrlString = fullUrlString
+                var trailingPunctuation = ""
+                
+                // Pop trailing punctuation from the matched URL string so the sentence punctuation is preserved
+                while let lastChar = cleanUrlString.unicodeScalars.last, trailingPunctuationChars.contains(lastChar) {
+                    trailingPunctuation = String(cleanUrlString.removeLast()) + trailingPunctuation
+                }
+                
+                if let url = URL(string: cleanUrlString), let host = url.host {
+                    let replaced = "link to \(host)\(trailingPunctuation)"
                     result = (result as NSString).replacingCharacters(in: match.range, with: replaced)
                 } else {
-                    result = (result as NSString).replacingCharacters(in: match.range, with: "")
+                    result = (result as NSString).replacingCharacters(in: match.range, with: trailingPunctuation)
                 }
             }
         }
+        
+        // Clean up any stray spaces before punctuation resulting from paren URL stripping
+        result = result.replacingOccurrences(of: #"\s+([.,;:!?])"#, with: "$1", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        
         return result
     }
     
@@ -212,7 +228,16 @@ struct TtsTextNormalizer {
     static func stripMarkdown(_ text: String) -> String {
         var result = text
         
-        // [text](url) -> text
+        // 1. Remove raw HTML images and picture containers
+        result = result.replacingOccurrences(of: "<picture[^>]*>[\\s\\S]*?</picture>", with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: "<img[^>]*>", with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: "<svg[^>]*>[\\s\\S]*?</svg>", with: "", options: .regularExpression)
+        
+        // 2. Remove Markdown images: ![alt text](url) and standalone ![alt text]
+        result = result.replacingOccurrences(of: "!\\[([^\\]]*)\\]\\([^)]*\\)", with: "", options: .regularExpression)
+        result = result.replacingOccurrences(of: "!\\[([^\\]]*)\\]", with: "", options: .regularExpression)
+        
+        // 3. [text](url) -> text (regular links)
         let linkPattern = "\\[([^\\]]+)\\]\\(([^)]+)\\)"
         if let regex = try? NSRegularExpression(pattern: linkPattern) {
             let nsString = result as NSString
@@ -223,6 +248,7 @@ struct TtsTextNormalizer {
             }
         }
         
+        // 4. Remove emphasis and inline code markers
         result = result.replacingOccurrences(of: "**", with: "")
         result = result.replacingOccurrences(of: "_", with: "")
         result = result.replacingOccurrences(of: "`", with: "")

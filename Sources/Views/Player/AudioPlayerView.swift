@@ -186,8 +186,9 @@ struct AudioPlayerView: View {
                     .zIndex(100)
                 }
 
-                // Immersive floating "Sync Highlight" pill for one-tap snapping in full screen
-                if !areControlsVisible && isParagraphScrolledAway {
+                // Floating "Sync Highlight" pill for one-tap snapping back to the spoken text.
+                // Shown whenever the user has scrolled away, whether or not the controls are up.
+                if isParagraphScrolledAway && !appState.hideText {
                     VStack {
                         Spacer()
                         
@@ -209,15 +210,11 @@ struct AudioPlayerView: View {
                         .contentShape(Capsule())
                         .onTapGesture {
                             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                            isParagraphScrolledAway = false
-                            lastScrolledParagraphIndex = nil
-                            lastScrolledSentenceRange = nil
-                            lastScrollTime = Date.distantPast
-                            
-                            checkAndCenterHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
+                            syncToHighlight(scrollProxy: scrollProxy, screenHeight: geometry.size.height)
                         }
                     }
-                    .padding(.bottom, geometry.safeAreaInsets.bottom + 20)
+                    // Sit above the floating player panel when it is showing.
+                    .padding(.bottom, geometry.safeAreaInsets.bottom + (areControlsVisible ? 240 : 20))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .transition(.asymmetric(
                         insertion: .scale(scale: 0.9).combined(with: .opacity),
@@ -533,6 +530,51 @@ struct AudioPlayerView: View {
             } else {
                 cancelAutoHideTimer()
             }
+        }
+    }
+
+    /// User-initiated snap back to the spoken text. Unlike `checkAndCenterHighlight`, this works
+    /// while paused and ignores the cooldown / "already scrolled here" guards, because the user
+    /// has scrolled the view away from the position those guards last recorded.
+    private func syncToHighlight(scrollProxy: ScrollViewProxy, screenHeight: CGFloat) {
+        let chapters = session.document.chapters
+        guard session.currentChapterIndex < chapters.count else { return }
+        let chapter = chapters[session.currentChapterIndex]
+        let paraIdx = session.currentParagraphIndex
+        guard paraIdx < chapter.paragraphs.count else { return }
+        let para = chapter.paragraphs[paraIdx]
+
+        let sentenceRange = activeSentenceRange(in: para.text, for: session.activeWordRange)
+        let progress: Double
+        if let location = sentenceRange?.location ?? session.activeWordRange?.location,
+           location != NSNotFound, para.text.count > 0 {
+            progress = Double(location) / Double(para.text.count)
+        } else {
+            progress = 0.0
+        }
+
+        // Same focal-line maths as the automatic follow; the paragraph's height doesn't
+        // depend on scroll position, so a previously measured rect is still valid.
+        let paragraphHeight = activeParagraphRect.height
+        let targetViewportAnchor = 0.35
+        let diff = paragraphHeight - screenHeight
+        let anchorY: Double
+        if paragraphHeight > 0, screenHeight > 0, abs(diff) > 1.0 {
+            anchorY = max(0.0, min(1.0, (progress * paragraphHeight - targetViewportAnchor * screenHeight) / diff))
+        } else {
+            anchorY = progress
+        }
+
+        lastScrolledParagraphIndex = paraIdx
+        lastScrolledSentenceRange = sentenceRange
+        lastScrolledProgress = progress
+        lastScrollTime = Date()
+
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+            isParagraphScrolledAway = false
+        }
+        withAnimation(.spring(response: 0.65, dampingFraction: 0.82)) {
+            scrollProxy.scrollTo(paraIdx, anchor: UnitPoint(x: 0.5, y: anchorY))
         }
     }
 

@@ -23,6 +23,7 @@ struct ContentView: View {
     
     @State private var showImportError = false
     @State private var importErrorMessage = ""
+    @State private var duplicateBookTitle: String? = nil
     
     // Incoming URL Shares / extension states
     @State private var urlToImport: IdentifiableURL? = nil
@@ -179,6 +180,14 @@ struct ContentView: View {
                     }
                 }
             }
+        }
+        .alert("Already in Your Library", isPresented: Binding(
+            get: { duplicateBookTitle != nil },
+            set: { if !$0 { duplicateBookTitle = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("\u{201C}\(duplicateBookTitle ?? "")\u{201D} is already in your library, so it wasn\u{2019}t imported again.")
         }
         .alert("Import Failed", isPresented: $showImportError) {
             Button("OK", role: .cancel) {}
@@ -406,9 +415,15 @@ struct ContentView: View {
                     pageCount: nil
                 )
             }
+            let candidate = LibraryEntry(from: doc)
+            if appState.libraryService.scanLocalLibrary().contains(where: { $0.isSameBook(as: candidate) }) {
+                // Re-importing the same file would only create a second copy with reset progress.
+                duplicateBookTitle = doc.title
+                return
+            }
             appState.libraryService.saveDocument(doc)
             appState.refresh()
-            appState.openDocument(LibraryEntry(from: doc))
+            appState.openDocument(candidate)
         } catch {
             importErrorMessage = error.localizedDescription
             showImportError = true
